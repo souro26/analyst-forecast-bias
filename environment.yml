@@ -15,4 +15,4 @@ dependencies:
   - matplotlib>=3.8
   - pip:
     - dvc>=3.0
-    - wrds
+    - yfinance>=0.2
