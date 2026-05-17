@@ -1,0 +1,10 @@
+data/raw/
+data/processed/
+data/external/
+results/
+__pycache__/
+*.pyc
+.env
+*.nc
+*.parquet
+.DS_Store
