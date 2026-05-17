@@ -8,3 +8,4 @@ __pycache__/
 *.nc
 *.parquet
 .DS_Store
+.env 
