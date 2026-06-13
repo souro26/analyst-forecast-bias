@@ -1,0 +1,103 @@
+mcmc:
+  draws: 2000
+  tune: 1000
+  cores: 4
+  target_accept: 0.95
+
+hmm:
+  n_states: 3
+  n_iter: 100
+
+cleaning:
+  winsorize_lower: 0.01
+  winsorize_upper: 0.99
+  date_start: "1993-01-01"
+  date_end: "2025-12-31"
+
+api:
+  fmp_calls_per_day_limit: 250
+
+tickers:
+  commodity_driven:
+    - XOM
+    - CVX
+    - COP
+    - SLB
+    - EOG
+    - OXY
+    - MPC
+    - PSX
+    - VLO
+    - LIN
+    - APD
+    - NEM
+
+  macro_rate_sensitive:
+    - JPM
+    - BAC
+    - WFC
+    - GS
+    - MS
+    - C
+    - USB
+    - PNC
+    - SCHW
+    - AMT
+    - PLD
+    - PSA
+
+  tech_cycle:
+    - NVDA
+    - AMD
+    - INTC
+    - TSM
+    - AVGO
+    - QCOM
+    - TXN
+    - MU
+    - ASML
+    - AMAT
+    - LRCX
+    - KLAC
+
+  economically_cyclical:
+    - HD
+    - MCD
+    - NKE
+    - SBUX
+    - BA
+    - CAT
+    - GE
+    - MMM
+    - HON
+    - AMZN
+    - LOW
+    - DE
+
+  regulatory_idiosyncratic:
+    - JNJ
+    - PFE
+    - UNH
+    - MRK
+    - ABT
+    - LLY
+    - TMO
+    - ABBV
+    - BMY
+    - AMGN
+    - GILD
+    - CVS
+
+  defensive_baseline:
+    - PG
+    - KO
+    - PEP
+    - CL
+    - WMT
+    - COST
+    - MO
+    - KMB
+    - NEE
+    - DUK
+    - SO
+    - AEP
