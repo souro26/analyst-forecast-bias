@@ -19,6 +19,7 @@ Outputs:
     - logs/ingest.log
 """
 
+import subprocess
 import csv
 import logging
 import sys
@@ -66,11 +67,7 @@ def ticker_sql_list(tickers: list[str]) -> str:
 
 
 def run_dolt_query(query: str) -> list[dict]:
-    """
-    Run a SQL query against the local Dolt database and return results
-    as a list of dicts. Uses 'dolt sql -q' in batch (non-interactive) mode,
-    which returns tab-separated values with a header row.
-    """
+    """Run a SQL query against the local Dolt database and return results as a list of dicts."""
     cmd = [
         "dolt", "sql",
         "--result-format", "csv",
@@ -114,10 +111,7 @@ def row_counts_by_ticker(rows: list[dict], ticker_col: str) -> dict[str, int]:
 
 
 def export_eps_history(tickers: list[str], config: dict) -> list[dict]:
-    """
-    Export eps_history for all tickers, filtered by date range in config.
-    Columns: act_symbol, period_end_date, reported, estimate
-    """
+    """Export eps_history for all tickers, filtered by date range in config."""
     date_start = config["cleaning"]["date_start"]
     date_end = config["cleaning"]["date_end"]
     ticker_list = ticker_sql_list(tickers)
@@ -138,14 +132,7 @@ def export_eps_history(tickers: list[str], config: dict) -> list[dict]:
 
 
 def export_eps_estimate(tickers: list[str], config: dict) -> list[dict]:
-    """
-    Export eps_estimate for all tickers, filtered by date range in config.
-    Columns: date, act_symbol, period, period_end_date, consensus,
-             recent, count, high, low, year_ago
-    Only exports 'Current Quarter' and 'Current Year' periods to keep
-    the dataset focused — Next Quarter/Year are forward-looking forecasts,
-    not what we need for historical bias analysis.
-    """
+    """Export eps_estimate for all tickers, filtered by date range in config."""
     date_start = config["cleaning"]["date_start"]
     date_end = config["cleaning"]["date_end"]
     ticker_list = ticker_sql_list(tickers)
@@ -172,10 +159,7 @@ def validate_coverage(
     history_rows: list[dict],
     estimate_rows: list[dict],
 ) -> None:
-    """
-    Log coverage stats: which tickers have data, which are missing,
-    and row counts per ticker for both tables.
-    """
+    """Log coverage stats: which tickers have data, which are missing, and row counts per ticker for both tables."""
     history_count = row_counts_by_ticker(history_rows, "act_symbol")
     estimate_count = row_counts_by_ticker(estimate_rows, "act_symbol")
 
