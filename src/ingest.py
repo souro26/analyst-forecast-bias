@@ -1,37 +1,36 @@
 """
 ingest.py
 ---------
-Exports eps_history and eps_estimate tables from the local Dolt database
-(data/external/earnings/) into data/raw/ as CSV files, filtered to the
-72 tickers defined in configs/model_params.yml.
- 
-Usage:
-    python src/ingest.py
- 
-Requirements:
-    - Dolt CLI installed and in PATH
-    - data/external/earnings/ cloned via:
-        cd data/external && dolt clone post-no-preference/earnings
- 
+Filters the raw Dolt table dumps (eps_estimate_full.csv, eps_history_full.csv)
+to 72 tickers and date range, then writes clean CSVs to data/raw/.
+
+Prerequisites:
+    - data/raw/eps_estimate_full.csv  (from: dolt table export eps_estimate)
+    - data/raw/eps_history_full.csv   (from: dolt table export eps_history)
+
 Outputs:
     - data/raw/eps_history.csv
     - data/raw/eps_estimate.csv
     - logs/ingest.log
 """
 
-import subprocess
-import csv
 import logging
 import sys
 import yaml
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
+
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = ROOT / "configs" / "model_params.yml"
-DOLT_DB_PATH = ROOT / "data" / "external" / "earnings"
-RAW_DIR = ROOT / "data" / "raw"
-LOG_DIR = ROOT / "logs"
+CONFIG_PATH   = ROOT / "configs" / "model_params.yml"
+RAW_DIR       = ROOT / "data" / "raw"
+LOG_DIR       = ROOT / "logs"
+
+FULL_HISTORY  = RAW_DIR / "eps_history_full.csv"
+FULL_ESTIMATE = RAW_DIR / "eps_estimate_full.csv"
+OUT_HISTORY   = RAW_DIR / "eps_history.csv"
+OUT_ESTIMATE  = RAW_DIR / "eps_estimate.csv"
 
 LOG_DIR.mkdir(exist_ok=True)
 logging.basicConfig(
@@ -52,138 +51,43 @@ def load_config() -> dict:
 
 
 def get_all_tickers(config: dict) -> list[str]:
-    """Flatten the category → ticker mapping into a single sorted list."""
     tickers = []
-    for category, symbols in config["tickers"].items():
-        for symbol in symbols:
-            tickers.append(symbol)
+    for symbols in config["tickers"].values():
+        tickers.extend(symbols)
     return sorted(set(tickers))
 
 
-def ticker_sql_list(tickers: list[str]) -> str:
-    """Return a SQL-safe IN (...) string for the ticker list."""
-    escaped = ", ".join(f"'{t}'" for t in tickers)
-    return f"({escaped})"
+def get_ticker_category_map(config: dict) -> dict[str, str]:
+    mapping = {}
+    for category, symbols in config["tickers"].items():
+        for symbol in symbols:
+            mapping[symbol] = category
+    return mapping
 
-
-def run_dolt_query(query: str) -> list[dict]:
-    """Run a SQL query against the local Dolt database and return results as a list of dicts."""
-    cmd = [
-        "dolt", "sql",
-        "--result-format", "csv",
-        "-q", query,
-    ]
-    result = subprocess.run(
-        cmd,
-        cwd=DOLT_DB_PATH,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Dolt query failed:\n{result.stderr}\nQuery: {query}"
-        )
- 
-    lines = result.stdout.strip().splitlines()
-    if not lines:
-        return []
- 
-    reader = csv.DictReader(lines)
-    return list(reader)
-
-
-def write_csv(rows: list[dict], path: Path) -> None:
-    if not rows:
-        log.warning(f"No rows to write to {path}.")
-        return
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def row_counts_by_ticker(rows: list[dict], ticker_col: str) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for row in rows:
-        sym = row[ticker_col]
-        counts[sym] = counts.get(sym, 0) + 1
-    return counts
-
-
-def export_eps_history(tickers: list[str], config: dict) -> list[dict]:
-    """Export eps_history for all tickers, filtered by date range in config."""
-    date_start = config["cleaning"]["date_start"]
-    date_end = config["cleaning"]["date_end"]
-    ticker_list = ticker_sql_list(tickers)
- 
-    query = f"""
-        SELECT act_symbol, period_end_date, reported, estimate
-        FROM eps_history
-        WHERE act_symbol IN {ticker_list}
-          AND period_end_date >= '{date_start}'
-          AND period_end_date <= '{date_end}'
-        ORDER BY act_symbol, period_end_date;
-    """
- 
-    log.info("Querying eps_history from Dolt...")
-    rows = run_dolt_query(query)
-    log.info(f"eps_history: {len(rows)} rows returned.")
-    return rows
-
-
-def export_eps_estimate(tickers: list[str], config: dict) -> list[dict]:
-    """Export eps_estimate for all tickers, filtered by date range in config."""
-    date_start = config["cleaning"]["date_start"]
-    date_end = config["cleaning"]["date_end"]
-    ticker_list = ticker_sql_list(tickers)
- 
-    query = f"""
-        SELECT date, act_symbol, period, period_end_date,
-               consensus, recent, count, high, low, year_ago
-        FROM eps_estimate
-        WHERE act_symbol IN {ticker_list}
-          AND date >= '{date_start}'
-          AND date <= '{date_end}'
-          AND period IN ('Current Quarter', 'Current Year')
-        ORDER BY act_symbol, date;
-    """
- 
-    log.info("Querying eps_estimate from Dolt...")
-    rows = run_dolt_query(query)
-    log.info(f"eps_estimate: {len(rows)} rows returned.")
-    return rows
- 
 
 def validate_coverage(
     tickers: list[str],
-    history_rows: list[dict],
-    estimate_rows: list[dict],
+    history: pd.DataFrame,
+    estimate: pd.DataFrame,
 ) -> None:
-    """Log coverage stats: which tickers have data, which are missing, and row counts per ticker for both tables."""
-    history_count = row_counts_by_ticker(history_rows, "act_symbol")
-    estimate_count = row_counts_by_ticker(estimate_rows, "act_symbol")
+    history_tickers  = set(history["act_symbol"].unique())
+    estimate_tickers = set(estimate["act_symbol"].unique())
 
-    missing_history = [t for t in tickers if t not in history_count]
-    missing_estimate = [t for t in tickers if t not in estimate_count]
+    missing_history  = [t for t in tickers if t not in history_tickers]
+    missing_estimate = [t for t in tickers if t not in estimate_tickers]
 
     log.info("=" * 60)
     log.info("COVERAGE REPORT")
     log.info("=" * 60)
     log.info(f"Tickers requested : {len(tickers)}")
-    log.info(
-        f"eps_history       : {len(history_count)} tickers, "
-        f"{sum(history_count.values())} total rows"
-    )
-    log.info(
-        f"eps_estimate      : {len(estimate_count)} tickers, "
-        f"{sum(estimate_count.values())} total rows"
-    )
+    log.info(f"eps_history       : {len(history_tickers)} tickers, {len(history)} rows")
+    log.info(f"eps_estimate      : {len(estimate_tickers)} tickers, {len(estimate)} rows")
 
     if missing_history:
         log.warning(f"Missing from eps_history  : {missing_history}")
     else:
         log.info("All tickers present in eps_history.")
- 
+
     if missing_estimate:
         log.warning(f"Missing from eps_estimate : {missing_estimate}")
     else:
@@ -191,18 +95,20 @@ def validate_coverage(
 
     log.info("-" * 60)
     log.info("Row counts per ticker (eps_history):")
+    counts = history.groupby("act_symbol").size()
     for ticker in sorted(tickers):
-        count = history_count.get(ticker, 0)
-        flag = "  *** MISSING ***" if count == 0 else ""
+        count = counts.get(ticker, 0)
+        flag  = "  *** MISSING ***" if count == 0 else ""
         log.info(f"  {ticker:<6}  {count:>4} rows{flag}")
- 
+
     log.info("-" * 60)
-    log.info("Row counts per ticker (eps_estimate / Current Quarter only):")
+    log.info("Row counts per ticker (eps_estimate):")
+    counts = estimate.groupby("act_symbol").size()
     for ticker in sorted(tickers):
-        count = estimate_count.get(ticker, 0)
-        flag = "  *** MISSING ***" if count == 0 else ""
+        count = counts.get(ticker, 0)
+        flag  = "  *** MISSING ***" if count == 0 else ""
         log.info(f"  {ticker:<6}  {count:>4} rows{flag}")
- 
+
     log.info("=" * 60)
 
 
@@ -211,37 +117,72 @@ def main() -> None:
     log.info(f"ingest.py started at {datetime.now().isoformat()}")
     log.info("=" * 60)
 
-    config = load_config()
-    tickers = get_all_tickers(config)
-    log.info(f"Loaded {len(tickers)} tickers from {CONFIG_PATH}.")
+    config   = load_config()
+    tickers  = get_all_tickers(config)
+    cat_map  = get_ticker_category_map(config)
+    date_start = config["cleaning"]["date_start"]
+    date_end   = config["cleaning"]["date_end"]
+    log.info(f"Loaded {len(tickers)} tickers from config.")
+    log.info(f"Date range: {date_start} to {date_end}")
 
-    if not DOLT_DB_PATH.exists():
-        log.error(
-            f"Dolt database not found at {DOLT_DB_PATH}. "
-            "Run: cd data/external && dolt clone post-no-preference/earnings"
-        )
-        sys.exit(1)
-    
-    RAW_DIR.mkdir(exist_ok=True)
- 
-    history_rows = export_eps_history(tickers, config)
-    estimate_rows = export_eps_estimate(tickers, config)
-    validate_coverage(tickers, history_rows, estimate_rows)
+    for path in [FULL_HISTORY, FULL_ESTIMATE]:
+        if not path.exists():
+            log.error(
+                f"Raw dump not found: {path}\n"
+                "Run from data/external/earnings/:\n"
+                "  dolt table export eps_history ../../../data/raw/eps_history_full.csv\n"
+                "  dolt table export eps_estimate ../../../data/raw/eps_estimate_full.csv"
+            )
+            sys.exit(1)
 
-    history_path = RAW_DIR / "eps_history.csv"
-    estimate_path = RAW_DIR / "eps_estimate.csv"
- 
-    write_csv(history_rows, history_path)
-    log.info(f"Written: {history_path}")
- 
-    write_csv(estimate_rows, estimate_path)
-    log.info(f"Written: {estimate_path}")
- 
+    log.info(f"Loading {FULL_HISTORY.name} ...")
+    history_full = pd.read_csv(FULL_HISTORY, parse_dates=["period_end_date"])
+    log.info(f"  {len(history_full):,} rows loaded.")
+
+    log.info(f"Loading {FULL_ESTIMATE.name} ...")
+    estimate_full = pd.read_csv(
+        FULL_ESTIMATE,
+        parse_dates=["date", "period_end_date"],
+        low_memory=False,
+    )
+    log.info(f"  {len(estimate_full):,} rows loaded.")
+
+    history  = history_full[history_full["act_symbol"].isin(tickers)].copy()
+    estimate = estimate_full[estimate_full["act_symbol"].isin(tickers)].copy()
+    log.info(f"After ticker filter — history: {len(history):,} rows, estimate: {len(estimate):,} rows.")
+
+    history  = history[
+        (history["period_end_date"] >= date_start) &
+        (history["period_end_date"] <= date_end)
+    ].copy()
+
+    estimate = estimate[
+        (estimate["date"] >= date_start) &
+        (estimate["date"] <= date_end)
+    ].copy()
+    log.info(f"After date filter  — history: {len(history):,} rows, estimate: {len(estimate):,} rows.")
+
+    estimate = estimate[
+        estimate["period"].isin(["Current Quarter", "Current Year"])
+    ].copy()
+    log.info(f"After period filter — estimate: {len(estimate):,} rows.")
+
+    history["category"]  = history["act_symbol"].map(cat_map)
+    estimate["category"] = estimate["act_symbol"].map(cat_map)
+
+    history  = history.sort_values(["act_symbol", "period_end_date"]).reset_index(drop=True)
+    estimate = estimate.sort_values(["act_symbol", "date"]).reset_index(drop=True)
+
+    validate_coverage(tickers, history, estimate)
+
+    history.to_csv(OUT_HISTORY, index=False)
+    log.info(f"Written: {OUT_HISTORY}  ({len(history):,} rows)")
+
+    estimate.to_csv(OUT_ESTIMATE, index=False)
+    log.info(f"Written: {OUT_ESTIMATE}  ({len(estimate):,} rows)")
+
     log.info(f"ingest.py complete at {datetime.now().isoformat()}")
- 
- 
+
+
 if __name__ == "__main__":
     main()
-
-
-    
