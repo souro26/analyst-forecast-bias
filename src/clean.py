@@ -86,7 +86,7 @@ def winsorize_by_category(
         for cat, t in sorted(thresholds.items()):
             log.info(f"    {cat:<30}  lower={t['lower']:>8.4f}  upper={t['upper']:>8.4f}")
 
-        return df, thresholds
+    return df, thresholds
 
 
 def assign_fiscal_quarter(period_end_date: pd.Series) -> pd.Series:
