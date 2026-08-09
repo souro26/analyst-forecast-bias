@@ -166,13 +166,8 @@ def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
     macro_lookup.index = pd.to_datetime(macro_lookup.index)
     macro_dates = macro_lookup.index.sort_values()
 
-    def match_quarter(date):
-        diffs = (macro_dates - date).days.abs() if hasattr((macro_dates - date), 'days') else abs((macro_dates - date).astype(int))
-        idx   = (macro_dates - date).abs().argmin()
-        return macro_dates[idx]
-
     panel["macro_quarter"] = panel["period_end_date"].apply(
-        lambda d: macro_dates[((macro_dates - d).abs()).argmin()]
+        lambda d: macro_dates[((macro_dates - d).total_seconds().abs()).argmin()]
     )
 
     panel = panel.merge(
