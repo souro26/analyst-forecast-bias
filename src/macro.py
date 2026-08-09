@@ -163,7 +163,8 @@ def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
     macro_reset = macro_reset.rename(columns={"quarter_end": "period_end_date"})
     macro_reset["period_end_date"] = pd.to_datetime(macro_reset["period_end_date"])
 
-    panel["period_end_date"] = pd.to_datetime(panel["period_end_date"])
+    panel["period_end_date"] = pd.to_datetime(panel["period_end_date"]).dt.normalize()
+    macro_reset["period_end_date"] = pd.to_datetime(macro_reset["period_end_date"]).dt.normalize()
 
     panel = panel.sort_values("period_end_date")
     macro_reset = macro_reset.sort_values("period_end_date")
