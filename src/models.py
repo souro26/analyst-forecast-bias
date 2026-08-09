@@ -6,33 +6,36 @@ Hierarchical Bayesian model of analyst forecast bias.
 Structure:
     Level 1 - grand mean (mu_global)
     Level 2 - category effects (alpha_category)
-    Level 3 - year effects grouped by regime (mu_regime, year_effect)
+    Level 3 - continuous macro effects (beta_sp500, beta_vix)
     Likelihood - Student-t (justified by EDA QQ plots)
 
-The key insight: regime signal operates at the year level, not the
-observation level. Adding a year random effect with regime-level
-hyperpriors lets the model find regime structure without being
-drowned by within-quarter observation noise.
+Why continuous macro predictors instead of discrete regime labels:
+    With only 9 years of data, discrete bull/bear/sideways labels
+    give the model 3-4 data points per regime — not enough to
+    estimate regime effects. Continuous predictors (quarterly S&P
+    return and average VIX) give every observation its own macro
+    context (2,455 data points), making macro effects estimable
+    and quantitative.
 
 Model:
     mu_global         ~ Normal(0, 0.5)
     sigma_category    ~ HalfNormal(0.3)
     alpha_category[c] ~ Normal(0, sigma_category)
 
-    mu_regime[r]      ~ Normal(0, 0.3)       # mean effect per regime
-    sigma_year        ~ HalfNormal(0.2)       # year-to-year noise within regime
-    year_effect[y]    ~ Normal(mu_regime[regime_of_year[y]], sigma_year)
+    beta_sp500        ~ Normal(0, 0.3)   # effect of quarterly S&P return (z-scored)
+    beta_vix          ~ Normal(0, 0.3)   # effect of quarterly VIX (z-scored)
 
     mu[i] = mu_global
            + alpha_category[cat_idx[i]]
-           + year_effect[year_idx[i]]
+           + beta_sp500 * sp500_return_z[i]
+           + beta_vix   * vix_mean_z[i]
 
     nu    ~ Gamma(2, 0.1)
     sigma ~ HalfNormal(0.3)
     y[i]  ~ StudentT(nu, mu[i], sigma)
 
 Inputs:
-    - data/processed/panel.parquet
+    - data/processed/panel.parquet       (includes sp500_return_z, vix_mean_z)
     - data/processed/features.parquet
 
 Outputs:
@@ -87,25 +90,11 @@ CATEGORY_ORDER = [
     "defensive_baseline",
 ]
 
-REGIME_ORDER = ["bull", "sideways", "bear"]
-
-YEAR_REGIME_MAP = {
-    2017: "sideways",
-    2018: "bear",
-    2019: "bull",
-    2020: "bear",
-    2021: "sideways",
-    2022: "bear",
-    2023: "bull",
-    2024: "bull",
-    2025: "bull",
-}
-
 
 def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
     """
-    Load panel and features, merge, encode categoricals as integers.
-    Excludes 2026 (partial year). Drops rows missing regime or target.
+    Load panel and features, merge, validate macro columns present.
+    Excludes 2026 (partial year). Drops rows missing target.
     """
     log.info("Loading data...")
     panel    = pd.read_parquet(panel_path)
@@ -114,31 +103,25 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
     df = panel.merge(features, on=["act_symbol", "period_end_date"], how="left")
     log.info(f"  Merged shape: {df.shape}")
 
+    for col in ["sp500_return_z", "vix_mean_z"]:
+        if col not in df.columns:
+            raise ValueError(
+                f"Column '{col}' not found in panel. "
+                "Run macro.py before models.py."
+            )
+
     df = df[df["year"] < 2026].copy()
     log.info(f"  After excluding 2026: {len(df):,} rows")
 
     before = len(df)
-    df = df.dropna(subset=["regime", "forecast_error_winsorized"])
+    df = df.dropna(subset=["forecast_error_winsorized"])
     after = len(df)
     if before - after > 0:
-        log.warning(f"  Dropped {before - after} rows with missing regime or target.")
+        log.warning(f"  Dropped {before - after} rows missing target.")
 
     df["category_idx"] = pd.Categorical(
         df["category"], categories=CATEGORY_ORDER
     ).codes
-
-    year_order = sorted(df["year"].unique().tolist())
-    df["year_idx"] = df["year"].map({y: i for i, y in enumerate(year_order)})
-
-    df["regime_of_year"] = df["year"].map(YEAR_REGIME_MAP)
-    df["regime_idx"] = pd.Categorical(
-        df["regime_of_year"], categories=REGIME_ORDER
-    ).codes
-
-    n_years = len(year_order)
-    year_to_regime_idx = np.array([
-        REGIME_ORDER.index(YEAR_REGIME_MAP[y]) for y in year_order
-    ])
 
     log.info(f"  Final modelling rows: {len(df):,}")
     log.info("  Category index mapping:")
@@ -146,38 +129,41 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
         n = (df["category_idx"] == i).sum()
         log.info(f"    {i}  {c:<30}  n={n}")
 
-    log.info("  Year index mapping:")
-    for i, y in enumerate(year_order):
-        regime = YEAR_REGIME_MAP[y]
-        n = (df["year_idx"] == i).sum()
-        log.info(f"    {i}  {y}  regime={regime:<10}  n={n}")
-
-    df.attrs["year_order"]         = year_order
-    df.attrs["year_to_regime_idx"] = year_to_regime_idx.tolist()
-    df.attrs["n_years"]            = n_years
+    log.info("  Macro predictor summary:")
+    log.info(f"    sp500_return_z  mean={df['sp500_return_z'].mean():.4f}  "
+             f"std={df['sp500_return_z'].std():.4f}  "
+             f"min={df['sp500_return_z'].min():.4f}  "
+             f"max={df['sp500_return_z'].max():.4f}")
+    log.info(f"    vix_mean_z      mean={df['vix_mean_z'].mean():.4f}  "
+             f"std={df['vix_mean_z'].std():.4f}  "
+             f"min={df['vix_mean_z'].min():.4f}  "
+             f"max={df['vix_mean_z'].max():.4f}")
 
     return df
 
 
 def build_model(df: pd.DataFrame) -> pm.Model:
     """
-    Build the hierarchical Bayesian model with year-level regime effects.
-    """
-    n_categories       = len(CATEGORY_ORDER)
-    n_regimes          = len(REGIME_ORDER)
-    n_years            = df.attrs["n_years"]
-    year_to_regime_idx = np.array(df.attrs["year_to_regime_idx"])
+    Build the hierarchical Bayesian model with continuous macro predictors.
 
-    cat_idx  = df["category_idx"].values
-    year_idx = df["year_idx"].values
-    y        = df["forecast_error_winsorized"].values.astype(float)
+    beta_sp500: effect of a 1-SD increase in quarterly S&P 500 return
+                on forecast error. Positive = analysts underestimate more
+                in strong market quarters.
+    beta_vix:   effect of a 1-SD increase in quarterly VIX on forecast
+                error. Positive = analysts underestimate more in high
+                uncertainty quarters.
+    """
+    n_categories = len(CATEGORY_ORDER)
+
+    cat_idx    = df["category_idx"].values
+    sp500_z    = df["sp500_return_z"].values.astype(float)
+    vix_z      = df["vix_mean_z"].values.astype(float)
+    y          = df["forecast_error_winsorized"].values.astype(float)
 
     log.info("Building hierarchical model...")
-    log.info(f"  n_categories={n_categories}  n_regimes={n_regimes}  "
-             f"n_years={n_years}  n_obs={len(y)}")
+    log.info(f"  n_categories={n_categories}  n_obs={len(y)}")
 
     with pm.Model() as model:
-
         mu_global      = pm.Normal("mu_global", mu=0.0, sigma=0.5)
         sigma_category = pm.HalfNormal("sigma_category", sigma=0.3)
 
@@ -188,25 +174,16 @@ def build_model(df: pd.DataFrame) -> pm.Model:
             shape=n_categories,
         )
 
-        mu_regime  = pm.Normal("mu_regime", mu=0.0, sigma=0.3, shape=n_regimes)
-        sigma_year = pm.HalfNormal("sigma_year", sigma=0.2)
-
-        year_effect_raw = pm.Normal(
-            "year_effect_raw",
-            mu=0.0,
-            sigma=1.0,
-            shape=n_years,
-        )
-        year_effect = pm.Deterministic(
-            "year_effect",
-            mu_regime[year_to_regime_idx] + year_effect_raw * sigma_year,
-        )
+        beta_sp500 = pm.Normal("beta_sp500", mu=0.0, sigma=0.3)
+        beta_vix   = pm.Normal("beta_vix",   mu=0.0, sigma=0.3)
 
         mu = (
             mu_global
             + alpha_category[cat_idx]
-            + year_effect[year_idx]
+            + beta_sp500 * sp500_z
+            + beta_vix   * vix_z
         )
+
         nu    = pm.Gamma("nu", alpha=2, beta=0.1)
         sigma = pm.HalfNormal("sigma", sigma=0.3)
 
@@ -234,7 +211,8 @@ def sample_model(
     Sample from the posterior using NUTS.
     """
     log.info("Sampling posterior...")
-    log.info(f"  draws={draws}  tune={tune}  chains={chains}  target_accept={target_accept}")
+    log.info(f"  draws={draws}  tune={tune}  chains={chains}  "
+             f"target_accept={target_accept}")
 
     with model:
         with warnings.catch_warnings():
@@ -261,8 +239,7 @@ def check_convergence(trace: az.InferenceData) -> bool:
 
     summary = az.summary(trace, var_names=[
         "mu_global", "sigma_category", "alpha_category",
-        "mu_regime", "sigma_year", "year_effect",
-        "nu", "sigma"
+        "beta_sp500", "beta_vix", "nu", "sigma"
     ])
 
     max_rhat = summary["r_hat"].max()
@@ -289,20 +266,19 @@ def check_convergence(trace: az.InferenceData) -> bool:
     return converged
 
 
-def extract_results(trace: az.InferenceData, df: pd.DataFrame) -> pd.DataFrame:
+def extract_results(trace: az.InferenceData) -> pd.DataFrame:
     """
-    Extract posterior means and 94% HDI for key parameters.
+    Extract posterior means and 94% HDI for all key parameters.
     """
     log.info("Extracting posterior summaries...")
 
-    year_order = df.attrs["year_order"]
-    records    = []
+    records = []
 
     s   = az.summary(trace, var_names=["mu_global"])
     row = s.iloc[0]
     records.append({
         "parameter": "mu_global", "type": "global",
-        "category": None, "year": None, "regime": None,
+        "category": None,
         "mean": row["mean"], "sd": row["sd"],
         "hdi_3%": row["hdi_3%"], "hdi_97%": row["hdi_97%"],
         "r_hat": row["r_hat"],
@@ -313,30 +289,18 @@ def extract_results(trace: az.InferenceData, df: pd.DataFrame) -> pd.DataFrame:
         row = alpha_summary.iloc[i]
         records.append({
             "parameter": f"alpha_category[{cat}]", "type": "category_effect",
-            "category": cat, "year": None, "regime": None,
+            "category": cat,
             "mean": row["mean"], "sd": row["sd"],
             "hdi_3%": row["hdi_3%"], "hdi_97%": row["hdi_97%"],
             "r_hat": row["r_hat"],
         })
 
-    regime_summary = az.summary(trace, var_names=["mu_regime"])
-    for i, reg in enumerate(REGIME_ORDER):
-        row = regime_summary.iloc[i]
+    for var in ["beta_sp500", "beta_vix"]:
+        s   = az.summary(trace, var_names=[var])
+        row = s.iloc[0]
         records.append({
-            "parameter": f"mu_regime[{reg}]", "type": "regime_mean",
-            "category": None, "year": None, "regime": reg,
-            "mean": row["mean"], "sd": row["sd"],
-            "hdi_3%": row["hdi_3%"], "hdi_97%": row["hdi_97%"],
-            "r_hat": row["r_hat"],
-        })
-
-    year_summary = az.summary(trace, var_names=["year_effect"])
-    for i, yr in enumerate(year_order):
-        row = year_summary.iloc[i]
-        records.append({
-            "parameter": f"year_effect[{yr}]", "type": "year_effect",
-            "category": None, "year": yr,
-            "regime": YEAR_REGIME_MAP[yr],
+            "parameter": var, "type": "macro_effect",
+            "category": None,
             "mean": row["mean"], "sd": row["sd"],
             "hdi_3%": row["hdi_3%"], "hdi_97%": row["hdi_97%"],
             "r_hat": row["r_hat"],
@@ -347,7 +311,7 @@ def extract_results(trace: az.InferenceData, df: pd.DataFrame) -> pd.DataFrame:
         row = s.iloc[0]
         records.append({
             "parameter": var, "type": "global",
-            "category": None, "year": None, "regime": None,
+            "category": None,
             "mean": row["mean"], "sd": row["sd"],
             "hdi_3%": row["hdi_3%"], "hdi_97%": row["hdi_97%"],
             "r_hat": row["r_hat"],
@@ -361,24 +325,21 @@ def extract_results(trace: az.InferenceData, df: pd.DataFrame) -> pd.DataFrame:
         log.info(f"    {var:<20}  mean={row['mean']:.4f}  "
                  f"94% HDI=[{row['hdi_3%']:.4f}, {row['hdi_97%']:.4f}]")
 
-    log.info("  Regime means (mu_regime) — core Finding 1:")
-    for reg in REGIME_ORDER:
-        row = results_df[results_df["parameter"] == f"mu_regime[{reg}]"].iloc[0]
-        log.info(f"    {reg:<10}  mean={row['mean']:.4f}  "
-                 f"94% HDI=[{row['hdi_3%']:.4f}, {row['hdi_97%']:.4f}]")
+    log.info("  Macro effects — core Finding 1:")
+    for var in ["beta_sp500", "beta_vix"]:
+        row = results_df[results_df["parameter"] == var].iloc[0]
+        excludes_zero = (row["hdi_3%"] > 0) or (row["hdi_97%"] < 0)
+        log.info(f"    {var:<15}  mean={row['mean']:.4f}  "
+                 f"94% HDI=[{row['hdi_3%']:.4f}, {row['hdi_97%']:.4f}]  "
+                 f"{'** excludes zero **' if excludes_zero else 'includes zero'}")
 
     log.info("  Category effects (alpha_category):")
     for cat in CATEGORY_ORDER:
         row = results_df[results_df["parameter"] == f"alpha_category[{cat}]"].iloc[0]
+        excludes_zero = (row["hdi_3%"] > 0) or (row["hdi_97%"] < 0)
         log.info(f"    {cat:<30}  mean={row['mean']:.4f}  "
-                 f"94% HDI=[{row['hdi_3%']:.4f}, {row['hdi_97%']:.4f}]")
-
-    log.info("  Year effects:")
-    for yr in year_order:
-        row = results_df[results_df["parameter"] == f"year_effect[{yr}]"].iloc[0]
-        log.info(f"    {yr}  regime={YEAR_REGIME_MAP[yr]:<10}  "
-                 f"mean={row['mean']:.4f}  "
-                 f"94% HDI=[{row['hdi_3%']:.4f}, {row['hdi_97%']:.4f}]")
+                 f"94% HDI=[{row['hdi_3%']:.4f}, {row['hdi_97%']:.4f}]  "
+                 f"{'** excludes zero **' if excludes_zero else 'includes zero'}")
 
     return results_df
 
@@ -396,7 +357,7 @@ def main() -> None:
     if not converged:
         log.warning("Convergence issues — check trace plots before interpreting.")
 
-    results_df = extract_results(trace, df)
+    results_df = extract_results(trace)
 
     trace.to_netcdf(str(TRACE_PATH))
     log.info(f"Written: {TRACE_PATH}")
