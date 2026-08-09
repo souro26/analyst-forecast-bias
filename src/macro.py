@@ -152,30 +152,28 @@ def build_macro_table(sp500: pd.DataFrame, vix: pd.DataFrame) -> pd.DataFrame:
 def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
     """
     Match each company-quarter in panel to its macro indicators.
-
-    Matching logic:
-        panel.period_end_date -> nearest quarter-end in macro table.
-        Most period_end_dates are already quarter-ends (Mar/Jun/Sep/Dec).
-        DE fiscal quarters (Jan/Apr/Jul/Oct) get matched to nearest.
+    Uses merge_asof for nearest-date matching.
     """
     log.info("Merging macro indicators onto panel...")
 
     panel = panel.copy()
-    macro_lookup = macro[["sp500_return", "sp500_return_z",
-                           "vix_mean", "vix_mean_z"]].copy()
-    macro_lookup.index = pd.to_datetime(macro_lookup.index)
-    macro_dates = macro_lookup.index.sort_values()
 
-    panel["macro_quarter"] = panel["period_end_date"].apply(
-        lambda d: macro_dates[((macro_dates - d).total_seconds().abs()).argmin()]
-    )
+    macro_reset = macro[["sp500_return", "sp500_return_z",
+                          "vix_mean", "vix_mean_z"]].reset_index()
+    macro_reset = macro_reset.rename(columns={"quarter_end": "period_end_date"})
+    macro_reset["period_end_date"] = pd.to_datetime(macro_reset["period_end_date"])
 
-    panel = panel.merge(
-        macro_lookup.reset_index().rename(columns={"quarter_end": "macro_quarter"}),
-        on="macro_quarter",
-        how="left",
+    panel["period_end_date"] = pd.to_datetime(panel["period_end_date"])
+
+    panel = panel.sort_values("period_end_date")
+    macro_reset = macro_reset.sort_values("period_end_date")
+
+    panel = pd.merge_asof(
+        panel,
+        macro_reset,
+        on="period_end_date",
+        direction="nearest",
     )
-    panel = panel.drop(columns=["macro_quarter"])
 
     n_null_sp500 = panel["sp500_return"].isnull().sum()
     n_null_vix   = panel["vix_mean"].isnull().sum()
@@ -189,9 +187,6 @@ def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
              f"std={panel['vix_mean'].std():.2f}")
 
     return panel
-
-
-# ── 5. Main ───────────────────────────────────────────────────────────────────
 
 def main() -> None:
     log.info("=" * 60)
