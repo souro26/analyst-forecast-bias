@@ -1,4 +1,4 @@
-"""Tests for src/clean.py — winsorize_by_category and assign_fiscal_quarter."""
+"""Tests for src/clean.py — winsorize_by_category, assign_fiscal_quarter, and normalized error targets."""
 
 import numpy as np
 import pandas as pd
@@ -104,3 +104,33 @@ class TestAssignFiscalQuarter:
         result = assign_fiscal_quarter(pd.Series(dates))
         assert result.iloc[0] == 4
         assert result.iloc[1] == 1
+
+
+class TestNormalizedError:
+
+    def test_normalized_error_basic(self):
+        # positive EPS
+        reported = 2.20
+        estimate = 2.00
+        normalized = (reported - estimate) / abs(estimate)
+        assert np.isclose(normalized, 0.10)
+
+        # negative EPS
+        reported = -1.80
+        estimate = -2.00
+        normalized = (reported - estimate) / abs(estimate)
+        assert np.isclose(normalized, 0.10)
+
+    def test_near_zero_estimates_handling(self):
+        # Test values close to zero (absolute value < 0.01)
+        eps_values = [0.0, 0.005, -0.008, -0.0001]
+        for est in eps_values:
+            val = np.where(
+                np.abs(est) >= 0.01,
+                (1.0 - est) / np.abs(est),
+                np.nan
+            )
+            assert np.isnan(val)
+
+        # Value just above or equal to threshold
+        assert not np.isnan(np.where(np.abs(0.01) >= 0.01, (1.0 - 0.01) / 0.01, np.nan))

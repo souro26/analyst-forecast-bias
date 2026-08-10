@@ -8,10 +8,14 @@ Steps:
     1. Load eps_history.csv and eps_estimate.csv
     2. Drop null reported/estimate rows (documented)
     3. Compute forecast_error = reported - estimate
-    4. Winsorize forecast_error by category (1st/99th percentile)
-    5. Add time features (year, quarter, fiscal_quarter)
-    6. Validate output integrity
-    7. Write panel.parquet and estimate_panel.parquet
+    4. Compute scale-normalized error target as robustness targets:
+       normalized_error = (reported - estimate) / abs(estimate)
+       If abs(estimate) < 0.01, normalized_error = NaN
+    5. Winsorize targets by category (1st/99th percentile)
+    6. Set prediction_cutoff = period_end_date
+    7. Add time features (year, quarter, fiscal_quarter)
+    8. Validate output integrity
+    9. Write panel.parquet and estimate_panel.parquet
  
 Usage:
     python src/clean.py
@@ -28,7 +32,6 @@ import yaml
 import numpy as np 
 import pandas as pd
 from pathlib import Path
-from scipy.stats import mstats
 
 ROOT         = Path(__file__).resolve().parent.parent
 CONFIG_PATH  = ROOT / "configs" / "model_params.yml"
@@ -69,22 +72,24 @@ def winsorize_by_category(
     col: str,
     lower: float,
     upper: float,
-) -> pd.DataFrame:
-    """Winsorize a column by category."""
+) -> tuple[pd.DataFrame, dict]:
+    """Winsorize a column by category, preserving NaNs."""
     df = df.copy()
     df[f"{col}_winsorized"] = np.nan
     thresholds = {}
     
     for cat, group in df.groupby("category"):
         vals = group[col].dropna()
+        if len(vals) == 0:
+            continue
         lo = vals.quantile(lower)
         hi = vals.quantile(upper)
         thresholds[cat] = {"lower": round(lo, 4), "upper": round(hi, 4)}
         df.loc[group.index, f"{col}_winsorized"] = group[col].clip(lo, hi)
 
-        log.info("Winsorization threshold by category:")
-        for cat, t in sorted(thresholds.items()):
-            log.info(f"    {cat:<30}  lower={t['lower']:>8.4f}  upper={t['upper']:>8.4f}")
+    log.info(f"Winsorization thresholds by category for '{col}':")
+    for cat, t in sorted(thresholds.items()):
+        log.info(f"    {cat:<30}  lower={t['lower']:>8.4f}  upper={t['upper']:>8.4f}")
 
     return df, thresholds
 
@@ -117,19 +122,37 @@ def clean_history(config: dict) -> pd.DataFrame:
     df = df.dropna(subset=["reported", "estimate"])
     log_drop("null reported or estimate", n, len(df))
 
+    # Define prediction cutoff
+    df["prediction_cutoff"] = df["period_end_date"]
+
+    # Compute raw forecast error
     df["forecast_error"] = df["reported"] - df["estimate"]
     log.info(f"  forecast_error computed: mean={df['forecast_error'].mean():.4f}, "
              f"std={df['forecast_error'].std():.4f}, "
              f"min={df['forecast_error'].min():.4f}, "
              f"max={df['forecast_error'].max():.4f}")
 
+    # Compute scale-normalized forecast error (handling near-zero estimates)
+    # Threshold is defined as abs(estimate) >= 0.01. Below this, normalized_error is NaN.
+    df["normalized_error"] = np.where(
+        df["estimate"].abs() >= 0.01,
+        (df["reported"] - df["estimate"]) / df["estimate"].abs(),
+        np.nan
+    )
+    
+    n_nan_norm = df["normalized_error"].isnull().sum()
+    log.info(f"  normalized_error computed: nulls/near-zeros={n_nan_norm} ({n_nan_norm/len(df)*100:.1f}%)")
+
     lower = config["cleaning"]["winsorize_lower"]
     upper = config["cleaning"]["winsorize_upper"]
-    log.info(f"  Winsorizing at [{lower}, {upper}] by category...")
-    df, thresholds = winsorize_by_category(df, "forecast_error", lower, upper)
+    log.info(f"  Winsorizing forecast_error and normalized_error at [{lower}, {upper}] by category...")
+    
+    df, raw_thresholds = winsorize_by_category(df, "forecast_error", lower, upper)
+    df, norm_thresholds = winsorize_by_category(df, "normalized_error", lower, upper)
 
-    clipped = (df["forecast_error"] != df["forecast_error_winsorized"]).sum()
-    log.info(f"  Rows clipped by winsorization: {clipped}")
+    clipped_raw = (df["forecast_error"] != df["forecast_error_winsorized"]).sum()
+    clipped_norm = (df["normalized_error"].dropna() != df["normalized_error_winsorized"].dropna()).sum()
+    log.info(f"  Rows clipped by winsorization — raw error: {clipped_raw}, normalized error: {clipped_norm}")
 
     df["year"]           = df["period_end_date"].dt.year
     df["calendar_month"] = df["period_end_date"].dt.month
@@ -167,6 +190,10 @@ def clean_estimate(config: dict) -> pd.DataFrame:
     null_recent = df["recent"].isnull().sum()
     log.info(f"  Null 'recent' values retained: {null_recent} ({null_recent/len(df)*100:.1f}%) "
              f"— 'recent' is not a primary variable")
+
+    # Set prediction cutoff
+    df["prediction_cutoff"] = df["period_end_date"]
+
     df["year"]           = df["date"].dt.year
     df["week"]           = df["date"].dt.isocalendar().week.astype(int)
     df["fiscal_quarter"] = assign_fiscal_quarter(df["period_end_date"])
@@ -196,15 +223,22 @@ def validate(panel: pd.DataFrame, estimate: pd.DataFrame, config: dict) -> None:
         log.warning(f"  Tickers missing from estimate_panel: {missing_estimate}")
     else:
         log.info("  All 72 tickers present in estimate_panel.")
-    critical_panel = ["reported", "estimate", "forecast_error", "forecast_error_winsorized", "category"]
+
+    critical_panel = [
+        "reported", "estimate", "forecast_error", "forecast_error_winsorized",
+        "normalized_error", "normalized_error_winsorized", "category",
+        "prediction_cutoff"
+    ]
     for col in critical_panel:
         n_null = panel[col].isnull().sum()
-        if n_null > 0:
+        if col in ["normalized_error", "normalized_error_winsorized"]:
+            log.info(f"  panel['{col}']: {n_null} nulls (expected due to near-zero estimate values).")
+        elif n_null > 0:
             log.warning(f"  panel['{col}'] has {n_null} nulls after cleaning.")
         else:
             log.info(f"  panel['{col}']: no nulls.")
  
-    critical_estimate = ["consensus", "category", "period_end_date"]
+    critical_estimate = ["consensus", "category", "period_end_date", "prediction_cutoff"]
     for col in critical_estimate:
         n_null = estimate[col].isnull().sum()
         if n_null > 0:
@@ -225,7 +259,6 @@ def validate(panel: pd.DataFrame, estimate: pd.DataFrame, config: dict) -> None:
 
 
 def main() -> None:
-    from datetime import datetime
     log.info("=" * 60)
     log.info(f"clean.py started at {datetime.now().isoformat()}")
     log.info("=" * 60)

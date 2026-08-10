@@ -24,9 +24,11 @@ def mock_data_paths(tmp_path):
     panel_df = pd.DataFrame({
         "act_symbol": ["AAPL", "JPM", "XOM"],
         "period_end_date": pd.to_datetime(["2020-03-31", "2020-03-31", "2020-03-31"]),
+        "prediction_cutoff": pd.to_datetime(["2020-03-31", "2020-03-31", "2020-03-31"]),
         "year": [2020, 2020, 2020],
         "category": ["tech_cycle", "macro_rate_sensitive", "commodity_driven"],
         "forecast_error_winsorized": [0.1, 0.2, -0.05],
+        "normalized_error_winsorized": [0.05, 0.10, -0.02],
         "sp500_return_z": [0.5, 0.5, 0.5],
         "vix_mean_z": [-0.2, -0.2, -0.2],
     })
@@ -52,9 +54,8 @@ def test_load_and_prepare(mock_data_paths):
 
     assert isinstance(df, pd.DataFrame)
     assert "category_idx" in df.columns
-    # 2026 is filtered out, but our mock doesn't have it anyway
+    assert "ticker_idx" in df.columns
     assert len(df) == 3
-    # Check category index values are codes pointing to CATEGORY_ORDER
     assert df.loc[df["act_symbol"] == "AAPL", "category_idx"].values[0] == CATEGORY_ORDER.index("tech_cycle")
 
 
@@ -62,6 +63,7 @@ def test_load_and_prepare_missing_macro_columns(tmp_path):
     panel_df = pd.DataFrame({
         "act_symbol": ["AAPL"],
         "period_end_date": pd.to_datetime(["2020-03-31"]),
+        "prediction_cutoff": pd.to_datetime(["2020-03-31"]),
         "year": [2020],
         "category": ["tech_cycle"],
         "forecast_error_winsorized": [0.1],
@@ -80,50 +82,71 @@ def test_load_and_prepare_missing_macro_columns(tmp_path):
         load_and_prepare(panel_path, features_path)
 
 
-def test_build_model():
+def test_build_model_raw():
     # Make a tiny mock DataFrame with all required columns
     df = pd.DataFrame({
+        "act_symbol": ["AAPL", "JPM", "XOM"],
         "category_idx": [0, 1, 2],
+        "ticker_idx": [0, 1, 2],
         "sp500_return_z": [0.1, -0.2, 0.3],
         "vix_mean_z": [-0.5, 0.2, 0.1],
         "forecast_error_winsorized": [0.05, 0.15, -0.02],
     })
 
-    model = build_model(df)
+    model = build_model(df, "forecast_error_winsorized")
     assert isinstance(model, pm.Model)
     
     # Check variables exist in the model
     varnames = [v.name for v in model.value_vars + model.free_RVs]
     assert any("mu_global" in name for name in varnames)
     assert any("alpha_category" in name for name in varnames)
+    assert any("alpha_ticker_offset" in name for name in varnames)
     assert any("beta_sp500" in name for name in varnames)
     assert any("beta_vix" in name for name in varnames)
     assert any("nu" in name for name in varnames)
     assert any("sigma" in name for name in varnames)
 
 
+def test_build_model_normalized():
+    # Make a tiny mock DataFrame with all required columns
+    df = pd.DataFrame({
+        "act_symbol": ["AAPL", "JPM", "XOM"],
+        "category_idx": [0, 1, 2],
+        "ticker_idx": [0, 1, 2],
+        "sp500_return_z": [0.1, -0.2, 0.3],
+        "vix_mean_z": [-0.5, 0.2, 0.1],
+        "normalized_error_winsorized": [0.05, 0.15, -0.02],
+    })
+
+    model = build_model(df, "normalized_error_winsorized")
+    assert isinstance(model, pm.Model)
+    
+    # Check variables exist in the model
+    varnames = [v.name for v in model.value_vars + model.free_RVs]
+    assert any("mu_global" in name for name in varnames)
+    assert any("alpha_category" in name for name in varnames)
+
+
 def test_sample_model_and_diagnostics():
     df = pd.DataFrame({
+        "act_symbol": ["AAPL", "JPM", "XOM", "AAPL", "JPM", "XOM"],
         "category_idx": [0, 1, 2, 0, 1, 2],
+        "ticker_idx": [0, 1, 2, 0, 1, 2],
         "sp500_return_z": [0.1, -0.2, 0.3, 0.1, -0.2, 0.3],
         "vix_mean_z": [-0.5, 0.2, 0.1, -0.5, 0.2, 0.1],
         "forecast_error_winsorized": [0.05, 0.15, -0.02, 0.04, 0.16, -0.03],
     })
 
-    model = build_model(df)
+    model = build_model(df, "forecast_error_winsorized")
     # Use very small draws/tune/chains to run fast in testing
     trace = sample_model(model, draws=5, tune=5, chains=2, target_accept=0.8, random_seed=123)
 
     assert isinstance(trace, az.InferenceData)
     
-    # Test check_convergence
-    # Note: with only 5 draws/tune, check_convergence might return True or False depending on diagnostics,
-    # but it should execute without raising an error.
     converged = check_convergence(trace)
     assert isinstance(converged, bool)
 
-    # Test extract_results
-    results = extract_results(trace)
+    results = extract_results(trace, "Raw error")
     assert isinstance(results, pd.DataFrame)
     assert not results.empty
     assert "parameter" in results.columns

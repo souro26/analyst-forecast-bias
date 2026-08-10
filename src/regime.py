@@ -1,28 +1,20 @@
 """
 regime.py
 ---------
+Optional exploratory market-regime analysis.
 Infers market regimes from S&P 500 monthly returns using a 3-state
-Hidden Markov Model (bull / sideways / bear). Attaches regime labels
-to panel.parquet as a new column.
+Hidden Markov Model (bull / sideways / bear).
 
-Steps:
-    1. Download S&P 500 monthly returns via yfinance
-    2. Fit 3-state Gaussian HMM (hmmlearn)
-    3. Interpret and validate state labels
-    4. Map monthly regimes to company-quarters in panel.parquet
-    5. Write data/processed/regimes.parquet and updated panel.parquet
-
-Fallback:
-    If HMM convergence fails, uses FRED USREC recession indicator
-    (binary: recession / expansion).
-
-Usage:
-    python src/regime.py
+NOTE: The HMM is not a dependency of the primary Bayesian or XGBoost models.
+It is used only for exploratory regime analysis.
 
 Outputs:
     - data/processed/regimes.parquet   (monthly regime labels)
-    - data/processed/panel.parquet     (updated with regime column)
+    - data/processed/panel_exploratory_regimes.parquet (panel merged with regimes, for exploration)
     - logs/regime.log
+
+Usage:
+    python src/regime.py
 """
 
 import logging
@@ -45,6 +37,7 @@ LOG_DIR = ROOT / "logs"
 
 OUT_REGIMES = PROCESSED / "regimes.parquet"
 PANEL_PATH = PROCESSED / "panel.parquet"
+OUT_EXPLORATORY_PANEL = PROCESSED / "panel_exploratory_regimes.parquet"
 
 LOG_DIR.mkdir(exist_ok=True)
 logging.basicConfig(
@@ -69,11 +62,6 @@ def get_sp500_returns(start: str = "2016-01-01", end: str = "2026-06-01") -> pd.
     
     log.info(f"  S&P 500 returns: {len(returns)} months  "
              f"({returns.index[0].date()} to {returns.index[-1].date()})")
-    log.info(f"  Mean monthly return : {returns.mean():.4f}")
-    log.info(f"  Std monthly return  : {returns.std():.4f}")
-    log.info(f"  Min                 : {returns.min():.4f}  "
-             f"Max: {returns.max():.4f}")
-    
     return returns.to_frame(name="monthly_return")
 
 def fit_hmm(returns: pd.DataFrame, n_states: int = 3, n_iter: int = 100, random_state: int = 42) -> tuple:
@@ -99,13 +87,6 @@ def fit_hmm(returns: pd.DataFrame, n_states: int = 3, n_iter: int = 100, random_
         log.info("  HMM converged.")
     
     state_sequence = model.predict(X)
-
-    log.info("  Raw state statistics (before labelling):")
-    for s in range(n_states):
-        mask = state_sequence == s
-        state_returns = returns["monthly_return"].values[mask]
-        log.info(f"    State {s}: mean={state_returns.mean():.4f}  "
-                 f"std={state_returns.std():.4f}  n={mask.sum()}")
     
     return model, state_sequence
 
@@ -135,25 +116,6 @@ def label_states(returns: pd.DataFrame, state_sequence: np.ndarray, n_states: in
     regime_df["regime"] = regime_df["state_raw"].map(state_map)
     regime_df["year"] = regime_df.index.year
     regime_df["month"] = regime_df.index.month
-
-    log.info("Validation against known regime periods:")
-    
-    checks = {
-        "2020-03": "bear",
-        "2020-04": "bear",
-        "2021-06": "bull",
-        "2022-06": "bear",
-        "2023-06": "bull",
-    }
-    for ym, expected in checks.items():
-        yr, mo = int(ym.split("-")[0]), int(ym.split("-")[1])
-        row = regime_df[(regime_df["year"] == yr) & (regime_df["month"] == mo)]
-        if len(row) ==0:
-             log.warning(f"    {ym}: not found in regime series")
-             continue
-        actual = row["regime"].values[0]
-        status = "OK" if actual == expected else "MISMATCH"
-        log.info(f"    {ym}: expected={expected}  actual={actual}  [{status}]")
     
     return regime_df
 
@@ -171,13 +133,7 @@ def get_fred_fallback() -> pd.DataFrame:
         regime_df["regime"] = regime_df["usrec"].map({1: "bear", 0: "bull"})
         regime_df["year"]   = regime_df.index.year
         regime_df["month"]  = regime_df.index.month
-        
-        log.info(f"  FRED USREC loaded: {len(regime_df)} months")
-        log.info(f"  Bear months : {(regime_df['regime'] == 'bear').sum()}")
-        log.info(f"  Bull months : {(regime_df['regime'] == 'bull').sum()}")
-        
         return regime_df
-    
     except Exception as e:
         log.error(f"  FRED fallback failed: {e}")
         log.error("  No regime labels available — stopping.")
@@ -203,18 +159,6 @@ def attach_regimes(panel: pd.DataFrame, regime_df: pd.DataFrame) -> pd.DataFrame
         lambda ym: regime_lookup.get(ym, np.nan)
     )
     panel = panel.drop(columns=["year_month_key"])
-
-    n_null = panel["regime"].isnull().sum()
-    if n_null > 0:
-        log.warning(f"  {n_null} rows could not be assigned a regime label.")
-    else:
-        log.info("  All rows assigned a regime label.")
-
-    log.info("  Regime distribution in panel:")
-    for regime, count in panel["regime"].value_counts().items():
-        pct = count / len(panel) * 100
-        log.info(f"    {regime:<10} {count:>4} rows  ({pct:.1f}%)")
-
     return panel
                 
 def main() -> None:
@@ -227,17 +171,21 @@ def main() -> None:
         log.warning("HMM did not converge - switching to FRED fallback.")
         regime_df = get_fred_fallback()
 
-    panel = pd.read_parquet(PANEL_PATH)
-    log.info(f"Panel loaded: {len(panel):,} rows")
-    panel = attach_regimes(panel, regime_df)
-
+    # Save regimes output
     regimes_out = regime_df[["year", "month", "regime"]].copy()
     regimes_out.index.name = "date"
     regimes_out.to_parquet(OUT_REGIMES)
     log.info(f"Written: {OUT_REGIMES}")
 
-    panel.to_parquet(PANEL_PATH, index=False)
-    log.info(f"Updated: {PANEL_PATH}  (now includes regime column)")
+    # Read and merge with panel for exploratory purposes
+    if PANEL_PATH.exists():
+        panel = pd.read_parquet(PANEL_PATH)
+        log.info(f"Panel loaded: {len(panel):,} rows")
+        panel = attach_regimes(panel, regime_df)
+        panel.to_parquet(OUT_EXPLORATORY_PANEL, index=False)
+        log.info(f"Written exploratory panel with regimes: {OUT_EXPLORATORY_PANEL}")
+    else:
+        log.warning("Clean panel not found; skipping exploratory panel creation.")
 
     log.info("=" * 60)
     log.info(f"regime.py complete at {datetime.now().isoformat()}")

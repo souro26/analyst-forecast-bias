@@ -38,7 +38,8 @@ def test_compute_features_shape():
         "count": [10, 10, 11, 11, 12, 12, 12, 13],
     })
 
-    feats = compute_features(group)
+    cutoff = pd.Timestamp("2020-03-31")
+    feats = compute_features(group, cutoff)
 
     assert isinstance(feats, dict)
     assert feats["weeks_of_data"] == 8
@@ -51,30 +52,86 @@ def test_compute_features_shape():
     assert feats["analyst_count_trend"] > 0
 
 
-def test_build_features():
-    # Setup mock estimate DataFrame
-    dates = pd.date_range(end="2020-03-31", periods=10, freq="W")
+def test_build_features_pit_boundaries():
+    # Setup mock estimate DataFrame with edge case dates around cutoff
+    cutoff = pd.Timestamp("2020-03-31")
+    
+    # 16 weeks window: [2019-12-10, 2020-03-31)
+    # 1. 2019-12-09: Outside 16-week window (too old) -> Exclude
+    # 2. 2019-12-10: Exactly 112 days before cutoff -> Include
+    # 3. 2020-01-15: Inside window -> Include
+    # 4. 2020-03-30: Latest valid snapshot strictly before cutoff -> Include
+    # 5. 2020-03-31: Exactly at cutoff -> Exclude
+    # 6. 2020-04-01: After cutoff -> Exclude
+    
+    dates = pd.to_datetime([
+        "2019-12-09",
+        "2019-12-10",
+        "2020-01-15",
+        "2020-03-30",
+        "2020-03-31",
+        "2020-04-01"
+    ])
+    
+    # Create estimate panel
     estimate = pd.DataFrame({
-        "act_symbol": ["AAPL"] * 5 + ["JPM"] * 5,
-        "period_end_date": pd.to_datetime(["2020-03-31"] * 10),
-        "period": ["Current Quarter"] * 10,
-        "date": list(dates[:5]) + list(dates[5:]),
-        "consensus": [2.5, 2.55, 2.6, 2.62, 2.65, 1.2, 1.18, 1.15, 1.10, 1.05],
-        "consensus_spread": [0.1] * 10,
-        "count": [15] * 10,
+        "act_symbol": ["AAPL"] * 6,
+        "period_end_date": [cutoff] * 6,
+        "prediction_cutoff": [cutoff] * 6,
+        "period": ["Current Quarter"] * 6,
+        "date": dates,
+        "consensus": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
+        "consensus_spread": [0.05] * 6,
+        "count": [10] * 6,
+    })
+
+    # Filter mock dataframe to mimic features.py's internal behavior and check
+    # that build_features output uses exactly the expected snapshots
+    features_df = build_features(estimate)
+    
+    # Check that output exists
+    assert isinstance(features_df, pd.DataFrame)
+    assert len(features_df) == 1
+    
+    # Let's inspect final_vs_initial calculation:
+    # Included snapshots:
+    # 2019-12-10 (consensus=1.1)
+    # 2020-01-15 (consensus=1.2)
+    # 2020-03-30 (consensus=1.3)
+    # Total weeks of data should be 3
+    assert features_df.loc[0, "weeks_of_data"] == 3
+    
+    # 8-week limit: cutoff - 56 days = 2020-02-04
+    # Latest snapshot on or before 2020-02-04 is 2020-01-15 (consensus=1.2)
+    # final_consensus = 1.3 (at 2020-03-30)
+    # final_vs_initial = 1.3 - 1.2 = 0.1
+    assert np.isclose(features_df.loc[0, "final_vs_initial"], 0.1)
+
+
+def test_build_features_sparse_and_duplicates():
+    cutoff = pd.Timestamp("2020-03-31")
+    
+    # Duplicate dates and missing reference checks
+    dates = pd.to_datetime([
+        "2020-03-01",
+        "2020-03-01",  # Duplicate date
+        "2020-03-25"
+    ])
+    
+    estimate = pd.DataFrame({
+        "act_symbol": ["AAPL"] * 3,
+        "period_end_date": [cutoff] * 3,
+        "prediction_cutoff": [cutoff] * 3,
+        "period": ["Current Quarter"] * 3,
+        "date": dates,
+        "consensus": [1.0, 1.1, 1.2],  # Duplicate on 2020-03-01: consensus should be 1.1 (latest)
+        "consensus_spread": [0.05] * 3,
+        "count": [10] * 3,
     })
 
     features_df = build_features(estimate)
-
-    assert isinstance(features_df, pd.DataFrame)
-    assert len(features_df) == 2
-    assert "act_symbol" in features_df.columns
-    assert "period_end_date" in features_df.columns
-    assert "revision_slope" in features_df.columns
-
-    # AAPL has positive revision_slope, JPM has negative revision_slope
-    aapl_slope = features_df.loc[features_df["act_symbol"] == "AAPL", "revision_slope"].values[0]
-    jpm_slope = features_df.loc[features_df["act_symbol"] == "JPM", "revision_slope"].values[0]
-    
-    assert aapl_slope > 0
-    assert jpm_slope < 0
+    assert len(features_df) == 1
+    # Duplicate resolved, weeks_of_data should be 2
+    assert features_df.loc[0, "weeks_of_data"] == 2
+    # No snapshot exists on or before 2020-02-04 (cutoff - 56 days), so final_vs_initial must be NaN
+    assert np.isnan(features_df.loc[0, "final_vs_initial"])

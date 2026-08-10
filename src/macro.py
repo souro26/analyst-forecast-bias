@@ -1,20 +1,13 @@
 """
 macro.py
 --------
-Downloads quarterly S&P 500 returns and average VIX per quarter
-from yfinance and merges them onto panel.parquet as continuous
-macro predictors for the hierarchical Bayesian model.
-
-Why continuous predictors instead of discrete regime labels:
-    With only 9 years of data, discrete bull/bear/sideways labels
-    give the model 3-4 data points per regime — not enough to
-    estimate regime effects. Continuous predictors give every
-    observation its own macro context (2,455 data points), making
-    the macro effect estimable and quantitative.
+Downloads S&P 500 returns and VIX prices via yfinance, and prepares:
+1. Explanatory macro variables (full-quarter returns and averages) for descriptive/Bayesian analysis.
+2. Predictive point-in-time (PIT) macro variables (112-day lookback, strictly before the cutoff) for signals.
 
 Outputs:
-    - data/processed/panel.parquet   (updated with sp500_return, vix_mean columns)
-    - data/processed/macro.parquet   (quarterly macro indicators, for reference)
+    - data/processed/panel_macro.parquet   (updated with both explanatory and predictive macro variables)
+    - data/processed/macro.parquet         (quarterly macro indicators, for reference)
     - logs/macro.log
 
 Usage:
@@ -50,8 +43,9 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+
 def get_sp500_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.DataFrame:
-    """Download and compute quarterly S&P 500 returns."""
+    """Download and compute quarterly S&P 500 returns (explanatory)."""
     log.info("Downloading S&P 500 monthly prices...")
     raw = yf.download(
         "^GSPC",
@@ -62,7 +56,9 @@ def get_sp500_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> p
         progress=False,
     )
 
-    prices = raw["Close"].squeeze()
+    prices = raw["Close"]
+    if isinstance(prices, pd.DataFrame):
+        prices = prices.iloc[:, 0]
     prices.index = pd.to_datetime(prices.index)
 
     quarterly = prices.resample("QE").last()
@@ -72,17 +68,11 @@ def get_sp500_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> p
     df.index.name = "quarter_end"
 
     log.info(f"  S&P 500 quarterly returns: {len(df)} quarters")
-    log.info(f"  Range: {df.index[0].date()} to {df.index[-1].date()}")
-    log.info(f"  Mean  : {df['sp500_return'].mean():.4f}")
-    log.info(f"  Std   : {df['sp500_return'].std():.4f}")
-    log.info(f"  Min   : {df['sp500_return'].min():.4f}  "
-             f"Max: {df['sp500_return'].max():.4f}")
-
     return df
 
 
 def get_vix_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.DataFrame:
-    """Download and compute quarterly VIX mean values."""
+    """Download and compute quarterly VIX mean values (explanatory)."""
     log.info("Downloading VIX daily prices...")
     raw = yf.download(
         "^VIX",
@@ -93,7 +83,9 @@ def get_vix_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.
         progress=False,
     )
 
-    vix = raw["Close"].squeeze()
+    vix = raw["Close"]
+    if isinstance(vix, pd.DataFrame):
+        vix = vix.iloc[:, 0]
     vix.index = pd.to_datetime(vix.index)
 
     quarterly_vix = vix.resample("QE").mean()
@@ -102,21 +94,16 @@ def get_vix_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.
     df.index.name = "quarter_end"
 
     log.info(f"  VIX quarterly means: {len(df)} quarters")
-    log.info(f"  Range: {df.index[0].date()} to {df.index[-1].date()}")
-    log.info(f"  Mean  : {df['vix_mean'].mean():.2f}")
-    log.info(f"  Std   : {df['vix_mean'].std():.2f}")
-    log.info(f"  Min   : {df['vix_mean'].min():.2f}  "
-             f"Max: {df['vix_mean'].max():.2f}")
-
     return df
 
 
 def build_macro_table(sp500: pd.DataFrame, vix: pd.DataFrame) -> pd.DataFrame:
-    """Build standardized quarterly macro indicators table."""
-    log.info("Building quarterly macro table...")
+    """Build standardized quarterly macro indicators table for explanatory use."""
+    log.info("Building quarterly macro table (explanatory)...")
 
     macro = sp500.join(vix, how="inner")
 
+    # Explanatory variables are globally standardized for descriptive analysis
     macro["sp500_return_z"] = (
         (macro["sp500_return"] - macro["sp500_return"].mean())
         / macro["sp500_return"].std()
@@ -125,19 +112,63 @@ def build_macro_table(sp500: pd.DataFrame, vix: pd.DataFrame) -> pd.DataFrame:
         (macro["vix_mean"] - macro["vix_mean"].mean())
         / macro["vix_mean"].std()
     )
-
-    log.info(f"  Macro table: {len(macro)} quarters")
-    log.info(f"  sp500_return_z: mean={macro['sp500_return_z'].mean():.4f}  "
-             f"std={macro['sp500_return_z'].std():.4f}")
-    log.info(f"  vix_mean_z:     mean={macro['vix_mean_z'].mean():.4f}  "
-             f"std={macro['vix_mean_z'].std():.4f}")
-
     return macro
 
 
+def compute_pit_macro(
+    panel: pd.DataFrame,
+    gspc_close: pd.Series,
+    vix_close: pd.Series
+) -> pd.DataFrame:
+    """
+    Computes point-in-time (PIT) S&P 500 return and average VIX for each observation.
+    Uses strictly lookback data before prediction_cutoff:
+    [prediction_cutoff - 112 days, prediction_cutoff)
+    """
+    panel = panel.copy()
+    sp500_pit_vals = []
+    vix_pit_vals = []
+
+    # Sort indexes of series to be absolutely sure of order
+    gspc_close = gspc_close.sort_index()
+    vix_close = vix_close.sort_index()
+
+    for idx, row in panel.iterrows():
+        cutoff = pd.to_datetime(row["prediction_cutoff"])
+        start_date = cutoff - pd.Timedelta(days=112)
+
+        # 1. S&P 500 PIT Return: from 112 days ago to cutoff (exclusive)
+        gspc_before = gspc_close[gspc_close.index < cutoff]
+        if len(gspc_before) > 0:
+            p_end = gspc_before.values[-1]
+            gspc_start_candidates = gspc_close[gspc_close.index < start_date]
+            if len(gspc_start_candidates) > 0:
+                p_start = gspc_start_candidates.values[-1]
+            else:
+                p_start = gspc_before.values[0]
+            sp500_return_pit = (p_end - p_start) / p_start
+        else:
+            sp500_return_pit = np.nan
+
+        # 2. VIX PIT Mean: average VIX close over [start_date, cutoff)
+        vix_window = vix_close[(vix_close.index >= start_date) & (vix_close.index < cutoff)]
+        if len(vix_window) > 0:
+            vix_mean_pit = vix_window.mean()
+        else:
+            vix_before = vix_close[vix_close.index < cutoff]
+            vix_mean_pit = vix_before.values[-1] if len(vix_before) > 0 else np.nan
+
+        sp500_pit_vals.append(sp500_return_pit)
+        vix_pit_vals.append(vix_mean_pit)
+
+    panel["sp500_return_pit"] = sp500_pit_vals
+    panel["vix_mean_pit"] = vix_pit_vals
+    return panel
+
+
 def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
-    """Merge quarterly macro indicators onto company-quarter panel."""
-    log.info("Merging macro indicators onto panel...")
+    """Merge quarterly explanatory macro indicators onto panel."""
+    log.info("Merging explanatory macro indicators onto panel...")
 
     panel = panel.copy()
 
@@ -158,36 +189,49 @@ def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
         on="period_end_date",
         direction="nearest",
     )
-
-    n_null_sp500 = panel["sp500_return"].isnull().sum()
-    n_null_vix   = panel["vix_mean"].isnull().sum()
-    log.info(f"  sp500_return nulls after merge: {n_null_sp500}")
-    log.info(f"  vix_mean nulls after merge    : {n_null_vix}")
-
-    log.info("  Macro indicator summary in panel:")
-    log.info(f"    sp500_return  mean={panel['sp500_return'].mean():.4f}  "
-             f"std={panel['sp500_return'].std():.4f}")
-    log.info(f"    vix_mean      mean={panel['vix_mean'].mean():.2f}  "
-             f"std={panel['vix_mean'].std():.2f}")
-
     return panel
+
 
 def main() -> None:
     log.info("=" * 60)
     log.info(f"macro.py started at {datetime.now().isoformat()}")
     log.info("=" * 60)
 
-    sp500 = get_sp500_quarterly()
-    vix   = get_vix_quarterly()
-    macro = build_macro_table(sp500, vix)
+    # 1. Download/build quarterly explanatory macro indicators
+    sp500_q = get_sp500_quarterly()
+    vix_q   = get_vix_quarterly()
+    macro = build_macro_table(sp500_q, vix_q)
     macro.to_parquet(MACRO_PATH)
+    log.info(f"Written explanatory macro table: {MACRO_PATH}")
+
+    # 2. Download daily prices for point-in-time calculations
+    log.info("Downloading daily S&P 500 and VIX prices for PIT calculations...")
+    gspc_daily = yf.download("^GSPC", start="2016-01-01", end="2026-07-01", interval="1d", auto_adjust=True, progress=False)
+    vix_daily  = yf.download("^VIX", start="2016-01-01", end="2026-07-01", interval="1d", auto_adjust=True, progress=False)
+
+    gspc_close = gspc_daily["Close"]
+    if isinstance(gspc_close, pd.DataFrame):
+        gspc_close = gspc_close.iloc[:, 0]
+    vix_close = vix_daily["Close"]
+    if isinstance(vix_close, pd.DataFrame):
+        vix_close = vix_close.iloc[:, 0]
+
+    gspc_close.index = pd.to_datetime(gspc_close.index)
+    vix_close.index = pd.to_datetime(vix_close.index)
+
+    # Load panel
     panel = pd.read_parquet(PANEL_PATH)
     log.info(f"Panel loaded: {len(panel):,} rows")
 
+    # 3. Merge explanatory macro indicators
     panel = merge_onto_panel(panel, macro)
 
+    # 4. Compute predictive PIT macro indicators
+    log.info("Computing point-in-time predictive macro indicators...")
+    panel = compute_pit_macro(panel, gspc_close, vix_close)
+
     panel.to_parquet(PANEL_MACRO_PATH, index=False)
-    log.info(f"Written: {PANEL_MACRO_PATH}  (panel + sp500_return + vix_mean)")
+    log.info(f"Written panel with macro variables: {PANEL_MACRO_PATH}")
 
     log.info("=" * 60)
     log.info(f"macro.py complete at {datetime.now().isoformat()}")

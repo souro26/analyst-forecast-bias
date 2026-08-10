@@ -1,9 +1,9 @@
-"""Tests for src/macro.py — build_macro_table and merge_onto_panel."""
+"""Tests for src/macro.py — build_macro_table, merge_onto_panel, compute_pit_macro, and future leakage check."""
 
 import numpy as np
 import pandas as pd
 import pytest
-from src.macro import build_macro_table, merge_onto_panel
+from src.macro import build_macro_table, merge_onto_panel, compute_pit_macro
 
 
 @pytest.fixture
@@ -65,7 +65,41 @@ def test_merge_onto_panel(mock_sp500_returns, mock_vix_means):
     assert aapl_q1["sp500_return"].values[0] == 0.05
     assert aapl_q1["vix_mean"].values[0] == 25.0
 
-    # 2020-06-25 should merge with nearest quarter_end (2020-06-30)
-    jpm_q2 = merged[(merged["act_symbol"] == "JPM") & (merged["period_end_date"] == "2020-06-25")]
-    assert jpm_q2["sp500_return"].values[0] == -0.02
-    assert jpm_q2["vix_mean"].values[0] == 30.0
+
+def test_compute_pit_macro_no_future_leakage():
+    # Setup daily indices
+    dates = pd.date_range(start="2020-01-01", end="2020-06-01", freq="D")
+    
+    # Generate linear mock price series for GSPC and constant VIX
+    gspc_close = pd.Series(np.arange(100, 100 + len(dates)), index=dates)
+    vix_close = pd.Series([20.0] * len(dates), index=dates)
+
+    # Panel observation with prediction_cutoff as May 1st 2020
+    panel = pd.DataFrame({
+        "act_symbol": ["AAPL"],
+        "prediction_cutoff": pd.to_datetime(["2020-05-01"])
+    })
+
+    # Compute baseline PIT features
+    panel_pit = compute_pit_macro(panel, gspc_close, vix_close)
+    sp500_ret_base = panel_pit["sp500_return_pit"].values[0]
+    vix_mean_base = panel_pit["vix_mean_pit"].values[0]
+
+    # Add artificial future macro observations (e.g. huge spike on May 2nd)
+    future_dates = pd.date_range(start="2020-05-02", end="2020-06-30", freq="D")
+    gspc_future = pd.Series([500.0] * len(future_dates), index=future_dates)
+    vix_future = pd.Series([100.0] * len(future_dates), index=future_dates)
+
+    gspc_leaked = pd.concat([gspc_close, gspc_future])
+    vix_leaked = pd.concat([vix_close, vix_future])
+
+    # Re-compute PIT features using leaked series
+    panel_pit_leaked = compute_pit_macro(panel, gspc_leaked, vix_leaked)
+    sp500_ret_leaked = panel_pit_leaked["sp500_return_pit"].values[0]
+    vix_mean_leaked = panel_pit_leaked["vix_mean_pit"].values[0]
+
+    # PIT features must be identical! Future data should not affect them.
+    assert np.isclose(sp500_ret_base, sp500_ret_leaked)
+    assert np.isclose(vix_mean_base, vix_mean_leaked)
+    assert not np.isnan(sp500_ret_base)
+    assert not np.isnan(vix_mean_base)
