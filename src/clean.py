@@ -90,7 +90,7 @@ def winsorize_by_category(
 
 
 def assign_fiscal_quarter(period_end_date: pd.Series) -> pd.Series:
-    """Assign fiscal quarter (1-4) based on the month of period_end_date."""
+    """Assign fiscal quarter based on period end date."""
     month = period_end_date.dt.month
     return pd.cut(
         month,

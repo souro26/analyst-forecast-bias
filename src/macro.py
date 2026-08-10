@@ -51,12 +51,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 def get_sp500_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.DataFrame:
-    """
-    Download monthly S&P 500 prices, resample to quarterly,
-    compute quarter-over-quarter return.
-
-    Returns DataFrame indexed by quarter-end date with column sp500_return.
-    """
+    """Download and compute quarterly S&P 500 returns."""
     log.info("Downloading S&P 500 monthly prices...")
     raw = yf.download(
         "^GSPC",
@@ -87,13 +82,7 @@ def get_sp500_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> p
 
 
 def get_vix_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.DataFrame:
-    """
-    Download daily VIX, resample to quarterly mean.
-    VIX measures market uncertainty during the quarter —
-    the forecasting environment analysts were operating in.
-
-    Returns DataFrame indexed by quarter-end date with column vix_mean.
-    """
+    """Download and compute quarterly VIX mean values."""
     log.info("Downloading VIX daily prices...")
     raw = yf.download(
         "^VIX",
@@ -123,11 +112,7 @@ def get_vix_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.
 
 
 def build_macro_table(sp500: pd.DataFrame, vix: pd.DataFrame) -> pd.DataFrame:
-    """
-    Join S&P 500 returns and VIX into a single quarterly macro table.
-    Standardize both variables (z-score) so model coefficients are
-    on the same scale and interpretable as per-SD effects.
-    """
+    """Build standardized quarterly macro indicators table."""
     log.info("Building quarterly macro table...")
 
     macro = sp500.join(vix, how="inner")
@@ -151,10 +136,7 @@ def build_macro_table(sp500: pd.DataFrame, vix: pd.DataFrame) -> pd.DataFrame:
 
 
 def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
-    """
-    Match each company-quarter in panel to its macro indicators.
-    Uses merge_asof for nearest-date matching.
-    """
+    """Merge quarterly macro indicators onto company-quarter panel."""
     log.info("Merging macro indicators onto panel...")
 
     panel = panel.copy()

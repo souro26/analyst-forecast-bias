@@ -93,10 +93,7 @@ CATEGORY_ORDER = [
 
 
 def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
-    """
-    Load panel and features, merge, validate macro columns present.
-    Excludes 2026 (partial year). Drops rows missing target.
-    """
+    """Load and prepare data for Bayesian model."""
     log.info("Loading data...")
     panel    = pd.read_parquet(panel_path)
     features = pd.read_parquet(features_path)
@@ -144,16 +141,7 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
 
 
 def build_model(df: pd.DataFrame) -> pm.Model:
-    """
-    Build the hierarchical Bayesian model with continuous macro predictors.
-
-    beta_sp500: effect of a 1-SD increase in quarterly S&P 500 return
-                on forecast error. Positive = analysts underestimate more
-                in strong market quarters.
-    beta_vix:   effect of a 1-SD increase in quarterly VIX on forecast
-                error. Positive = analysts underestimate more in high
-                uncertainty quarters.
-    """
+    """Build the hierarchical Bayesian PyMC model."""
     n_categories = len(CATEGORY_ORDER)
 
     cat_idx    = df["category_idx"].values
@@ -208,9 +196,7 @@ def sample_model(
     target_accept: float = 0.95,
     random_seed: int = 42,
 ) -> az.InferenceData:
-    """
-    Sample from the posterior using NUTS.
-    """
+    """Sample from the posterior using NUTS sampler."""
     log.info("Sampling posterior...")
     log.info(f"  draws={draws}  tune={tune}  chains={chains}  "
              f"target_accept={target_accept}")
@@ -233,9 +219,7 @@ def sample_model(
 
 
 def check_convergence(trace: az.InferenceData) -> bool:
-    """
-    Check R-hat and ESS for all parameters.
-    """
+    """Check convergence diagnostics for Bayesian trace."""
     log.info("Checking convergence diagnostics...")
 
     summary = az.summary(trace, var_names=[
@@ -268,9 +252,7 @@ def check_convergence(trace: az.InferenceData) -> bool:
 
 
 def extract_results(trace: az.InferenceData) -> pd.DataFrame:
-    """
-    Extract posterior means and 94% HDI for all key parameters.
-    """
+    """Extract results summary from the MCMC trace."""
     log.info("Extracting posterior summaries...")
 
     records = []

@@ -89,9 +89,7 @@ TEST_YEARS  = list(range(2023, 2026))   # 2023-2025
 
 
 def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
-    """
-    Merge panel and features, encode categoricals, validate no leakage.
-    """
+    """Merge panel and feature datasets for modelling."""
     log.info("Loading data...")
     panel    = pd.read_parquet(panel_path)
     features = pd.read_parquet(features_path)
@@ -122,10 +120,7 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
 
 
 def split_data(df: pd.DataFrame) -> tuple:
-    """
-    Time-based split: train on 2017-2022, test on 2023-2025.
-    Returns X_train, X_test, y_train, y_test, train_df, test_df.
-    """
+    """Split dataset into train and test timeframes."""
     train = df[df["year"].isin(TRAIN_YEARS)].copy()
     test  = df[df["year"].isin(TEST_YEARS)].copy()
 
@@ -146,12 +141,7 @@ def train_model(
     X_test: pd.DataFrame,
     y_test: pd.Series,
 ) -> xgb.XGBClassifier:
-    """
-    Train XGBoost classifier with class imbalance correction.
-
-    scale_pos_weight = n_negative / n_positive
-    Upweights misses (minority class) to counteract 83% beat rate.
-    """
+    """Train XGBoost classifier using class weights."""
     n_pos = y_train.sum()
     n_neg = len(y_train) - n_pos
     scale_pos_weight = n_neg / n_pos
@@ -188,10 +178,7 @@ def evaluate(
     y_test: pd.Series,
     test_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Evaluate model on test set. Log AUC-ROC, PR-AUC, confusion matrix.
-    Returns results DataFrame with predictions attached.
-    """
+    """Evaluate classifier performance on test dataset."""
     log.info("Evaluating on test set (2023-2025)...")
 
     proba  = model.predict_proba(X_test)[:, 1]
@@ -236,11 +223,7 @@ def evaluate(
 def get_feature_importance(
     model: xgb.XGBClassifier,
 ) -> pd.DataFrame:
-    """
-    Extract and log feature importance (gain-based).
-    Gain = average improvement in loss from splits using that feature.
-    More meaningful than frequency-based importance.
-    """
+    """Extract gain-based feature importance from model."""
     log.info("Feature importance (gain):")
 
     importance = model.get_booster().get_score(importance_type="gain")

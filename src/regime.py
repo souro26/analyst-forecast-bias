@@ -110,7 +110,7 @@ def fit_hmm(returns: pd.DataFrame, n_states: int = 3, n_iter: int = 100, random_
     return model, state_sequence
 
 def label_states(returns: pd.DataFrame, state_sequence: np.ndarray, n_states: int = 3) -> pd.DataFrame:
-    """ Assign bull/sideways/bear labels to HMM states based on mean return."""
+    """Label HMM states as bull, sideways, or bear."""
     log.info("Labelling HMM states ...")
 
     state_means = {}
@@ -158,7 +158,7 @@ def label_states(returns: pd.DataFrame, state_sequence: np.ndarray, n_states: in
     return regime_df
 
 def get_fred_fallback() -> pd.DataFrame:
-    """Fallback regime labels from FRED USREC recession indicator."""
+    """Get fallback regime labels from FRED recession indicator."""
     log.info("Using FRED USREC fallback...")
 
     try:
