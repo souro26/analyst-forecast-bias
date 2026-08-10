@@ -137,71 +137,67 @@ def compute_pit_macro(
     panel: pd.DataFrame,
     gspc_close: pd.Series,
     vix_close: pd.Series
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Computes point-in-time (PIT) S&P 500 return and average VIX for each observation.
+
     Uses strictly lookback data before prediction_cutoff:
     [prediction_cutoff - 112 days, prediction_cutoff)
-    Also constructs macro_audit_df to track exact maximum timestamps used for validation.
+
+    The macro audit data is constructed separately in main().
     """
     panel = panel.copy()
     sp500_pit_vals = []
     vix_pit_vals = []
-    audit_records = []
 
-    # Sort indexes of series to be absolutely sure of order
     gspc_close = gspc_close.sort_index()
     vix_close = vix_close.sort_index()
 
-    for idx, row in panel.iterrows():
+    for _, row in panel.iterrows():
         cutoff = pd.to_datetime(row["prediction_cutoff"])
         start_date = cutoff - pd.Timedelta(days=112)
 
-        # 1. S&P 500 PIT Return: from 112 days ago to cutoff (exclusive)
+        # S&P 500 PIT return
         gspc_before = gspc_close[gspc_close.index < cutoff]
+
         if len(gspc_before) > 0:
-            latest_gspc_date = gspc_before.index[-1]
-            p_end = gspc_before.values[-1]
-            gspc_start_candidates = gspc_close[gspc_close.index < start_date]
+            p_end = gspc_before.iloc[-1]
+
+            gspc_start_candidates = gspc_close[
+                gspc_close.index < start_date
+            ]
+
             if len(gspc_start_candidates) > 0:
-                p_start = gspc_start_candidates.values[-1]
+                p_start = gspc_start_candidates.iloc[-1]
             else:
-                p_start = gspc_before.values[0]
+                p_start = gspc_before.iloc[0]
+
             sp500_return_pit = (p_end - p_start) / p_start
         else:
-            latest_gspc_date = pd.NaT
             sp500_return_pit = np.nan
 
-        # 2. VIX PIT Mean: average VIX close over [start_date, cutoff)
-        vix_window = vix_close[(vix_close.index >= start_date) & (vix_close.index < cutoff)]
+        # VIX PIT mean
+        vix_window = vix_close[
+            (vix_close.index >= start_date) &
+            (vix_close.index < cutoff)
+        ]
+
         if len(vix_window) > 0:
-            latest_vix_date = vix_window.index[-1]
             vix_mean_pit = vix_window.mean()
         else:
             vix_before = vix_close[vix_close.index < cutoff]
+
             if len(vix_before) > 0:
-                latest_vix_date = vix_before.index[-1]
-                vix_mean_pit = vix_before.values[-1]
+                vix_mean_pit = vix_before.iloc[-1]
             else:
-                latest_vix_date = pd.NaT
                 vix_mean_pit = np.nan
 
         sp500_pit_vals.append(sp500_return_pit)
         vix_pit_vals.append(vix_mean_pit)
-        
-        audit_records.append({
-            "act_symbol": row["act_symbol"],
-            "period_end_date": row.get("period_end_date", row["prediction_cutoff"]),
-            "prediction_cutoff": row["prediction_cutoff"],
-            "latest_gspc_date": latest_gspc_date,
-            "latest_vix_date": latest_vix_date,
-        })
 
     panel["sp500_return_pit"] = sp500_pit_vals
     panel["vix_mean_pit"] = vix_pit_vals
-    
-    audit_df = pd.DataFrame(audit_records)
-    panel.attrs["audit_df"] = audit_df
+
     return panel
 
 
@@ -274,10 +270,47 @@ def main() -> None:
     # 3. Merge explanatory macro indicators (explicit quarter alignment)
     panel = merge_onto_panel(panel, macro)
 
-    # 4. Compute predictive PIT macro indicators and build audit df
+    # 4. Compute predictive PIT macro indicators
     log.info("Computing point-in-time predictive macro indicators...")
     panel = compute_pit_macro(panel, gspc_close, vix_close)
-    audit_df = panel.attrs["audit_df"]
+
+    # Build separate audit table from the same PIT cutoff logic
+    audit_records = []
+
+    for _, row in panel.iterrows():
+        cutoff = pd.to_datetime(row["prediction_cutoff"])
+        start_date = cutoff - pd.Timedelta(days=112)
+
+        gspc_before = gspc_close[gspc_close.index < cutoff]
+        vix_window = vix_close[
+            (vix_close.index >= start_date) &
+            (vix_close.index < cutoff)
+        ]
+
+        latest_gspc_date = (
+            gspc_before.index[-1] if len(gspc_before) > 0 else pd.NaT
+        )
+
+        if len(vix_window) > 0:
+            latest_vix_date = vix_window.index[-1]
+        else:
+            vix_before = vix_close[vix_close.index < cutoff]
+            latest_vix_date = (
+                vix_before.index[-1] if len(vix_before) > 0 else pd.NaT
+            )
+
+        audit_records.append({
+            "act_symbol": row["act_symbol"],
+            "period_end_date": row.get(
+                "period_end_date",
+                row["prediction_cutoff"]
+            ),
+            "prediction_cutoff": row["prediction_cutoff"],
+            "latest_gspc_date": latest_gspc_date,
+            "latest_vix_date": latest_vix_date,
+        })
+
+    audit_df = pd.DataFrame(audit_records)
 
     panel.to_parquet(PANEL_MACRO_PATH, index=False)
     log.info(f"Written panel with macro variables: {PANEL_MACRO_PATH}")
