@@ -31,8 +31,10 @@ def mock_data_paths(tmp_path):
         "category": ["tech_cycle", "macro_rate_sensitive", "commodity_driven"],
         "forecast_error_winsorized": [0.1, 0.2, -0.05],
         "normalized_error_winsorized": [0.05, 0.10, -0.02],
-        "sp500_return_z": [0.5, 0.5, 0.5],
-        "vix_mean_z": [-0.2, -0.2, -0.2],
+        "sp500_return": [0.05, 0.02, -0.01],
+        "vix_mean": [15.0, 18.0, 22.0],
+        "sp500_return_pit": [0.05, 0.02, -0.01],
+        "vix_mean_pit": [15.0, 18.0, 22.0],
     })
     
     features_df = pd.DataFrame({
@@ -81,7 +83,7 @@ def test_load_and_prepare_missing_macro_columns(tmp_path):
     panel_df.to_parquet(panel_path, index=False)
     features_df.to_parquet(features_path, index=False)
 
-    with pytest.raises(ValueError, match="Column 'sp500_return_z' not found in panel"):
+    with pytest.raises(ValueError, match="Column 'sp500_return' not found in panel"):
         load_and_prepare(panel_path, features_path)
 
 
@@ -91,8 +93,8 @@ def test_build_model_raw():
         "act_symbol": ["AAPL", "JPM", "XOM"],
         "category_idx": [0, 1, 2],
         "ticker_idx": [0, 1, 2],
-        "sp500_return_z": [0.1, -0.2, 0.3],
-        "vix_mean_z": [-0.5, 0.2, 0.1],
+        "sp500_pit_scaled": [0.1, -0.2, 0.3],
+        "vix_pit_scaled": [-0.5, 0.2, 0.1],
         "forecast_error_winsorized": [0.05, 0.15, -0.02],
     })
 
@@ -100,13 +102,11 @@ def test_build_model_raw():
     assert isinstance(model, pm.Model)
     
     # Check variables exist in the model
-    varnames = [v.name for v in model.value_vars + model.free_RVs]
+    varnames = [v.name for v in model.value_vars + model.free_RVs + model.deterministics]
     assert any("mu_global" in name for name in varnames)
-    assert any("alpha_category" in name for name in varnames)
     assert any("alpha_ticker_offset" in name for name in varnames)
     assert any("beta_sp500" in name for name in varnames)
     assert any("beta_vix" in name for name in varnames)
-    assert any("nu" in name for name in varnames)
     assert any("sigma" in name for name in varnames)
 
 
@@ -124,13 +124,11 @@ def test_build_time_effect_model():
     assert isinstance(model, pm.Model)
     
     # Check variables exist in the model
-    varnames = [v.name for v in model.value_vars + model.free_RVs]
+    varnames = [v.name for v in model.value_vars + model.free_RVs + model.deterministics]
     assert any("mu_global" in name for name in varnames)
-    assert any("alpha_category" in name for name in varnames)
     assert any("alpha_ticker_offset" in name for name in varnames)
     assert any("alpha_quarter_offset" in name for name in varnames)
     assert not any("beta_sp500" in name for name in varnames)
-    assert any("nu" in name for name in varnames)
     assert any("sigma" in name for name in varnames)
 
 
@@ -139,8 +137,8 @@ def test_sample_model_and_diagnostics():
         "act_symbol": ["AAPL", "JPM", "XOM", "AAPL", "JPM", "XOM"],
         "category_idx": [0, 1, 2, 0, 1, 2],
         "ticker_idx": [0, 1, 2, 0, 1, 2],
-        "sp500_return_z": [0.1, -0.2, 0.3, 0.1, -0.2, 0.3],
-        "vix_mean_z": [-0.5, 0.2, 0.1, -0.5, 0.2, 0.1],
+        "sp500_pit_scaled": [0.1, -0.2, 0.3, 0.1, -0.2, 0.3],
+        "vix_pit_scaled": [-0.5, 0.2, 0.1, -0.5, 0.2, 0.1],
         "forecast_error_winsorized": [0.05, 0.15, -0.02, 0.04, 0.16, -0.03],
     })
 

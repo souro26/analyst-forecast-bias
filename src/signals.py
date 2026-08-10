@@ -501,7 +501,7 @@ def main() -> None:
     macro_audit = None
     if MACRO_AUDIT_PATH.exists():
         macro_audit = pd.read_parquet(MACRO_AUDIT_PATH)
-    generate_temporal_audit_report(estimate_panel, macro_audit, folds, str(OUT_AUDIT))
+    generate_temporal_audit_report(df, estimate_panel, macro_audit, folds, str(OUT_AUDIT))
 
     # 4. Run Ablation Experiments (includes 95% CI of fold scores)
     ablation_df = run_ablation_experiments(folds)

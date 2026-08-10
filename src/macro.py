@@ -110,7 +110,12 @@ def get_vix_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.
 
 
 def build_macro_table(sp500: pd.DataFrame, vix: pd.DataFrame) -> pd.DataFrame:
-    """Build standardized quarterly macro indicators table for explanatory use."""
+    """Build quarterly explanatory macro indicators.
+
+    Raw quarterly macro variables are retained for descriptive and
+    explanatory analysis. Predictive PIT variables are computed separately
+    from daily data in compute_pit_macro().
+    """
     log.info("Building quarterly macro table (explanatory)...")
 
     macro = sp500.join(vix, how="inner")
@@ -119,10 +124,12 @@ def build_macro_table(sp500: pd.DataFrame, vix: pd.DataFrame) -> pd.DataFrame:
         (macro["sp500_return"] - macro["sp500_return"].mean())
         / macro["sp500_return"].std()
     )
+
     macro["vix_mean_z"] = (
         (macro["vix_mean"] - macro["vix_mean"].mean())
         / macro["vix_mean"].std()
     )
+
     return macro
 
 
@@ -184,7 +191,7 @@ def compute_pit_macro(
         
         audit_records.append({
             "act_symbol": row["act_symbol"],
-            "period_end_date": row["period_end_date"],
+            "period_end_date": row.get("period_end_date", row["prediction_cutoff"]),
             "prediction_cutoff": row["prediction_cutoff"],
             "latest_gspc_date": latest_gspc_date,
             "latest_vix_date": latest_vix_date,
@@ -194,7 +201,8 @@ def compute_pit_macro(
     panel["vix_mean_pit"] = vix_pit_vals
     
     audit_df = pd.DataFrame(audit_records)
-    return panel, audit_df
+    panel.attrs["audit_df"] = audit_df
+    return panel
 
 
 def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
@@ -203,8 +211,7 @@ def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
 
     panel = panel.copy()
 
-    macro_reset = macro[["sp500_return", "sp500_return_z",
-                          "vix_mean", "vix_mean_z"]].reset_index()
+    macro_reset = macro[["sp500_return", "sp500_return_z", "vix_mean", "vix_mean_z"]].reset_index()
     macro_reset = macro_reset.rename(columns={"quarter_end": "period_end_date"})
     macro_reset["period_end_date"] = pd.to_datetime(macro_reset["period_end_date"])
     
@@ -269,7 +276,8 @@ def main() -> None:
 
     # 4. Compute predictive PIT macro indicators and build audit df
     log.info("Computing point-in-time predictive macro indicators...")
-    panel, audit_df = compute_pit_macro(panel, gspc_close, vix_close)
+    panel = compute_pit_macro(panel, gspc_close, vix_close)
+    audit_df = panel.attrs["audit_df"]
 
     panel.to_parquet(PANEL_MACRO_PATH, index=False)
     log.info(f"Written panel with macro variables: {PANEL_MACRO_PATH}")

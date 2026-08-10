@@ -1,12 +1,6 @@
 parameter,type,category,mean,sd,hdi_3%,hdi_97%,r_hat
-mu_global,global,,0.072,0.014,0.047,0.099,1.0
-alpha_category[commodity_driven],category_effect,commodity_driven,-0.004,0.015,-0.032,0.023,1.0
-alpha_category[macro_rate_sensitive],category_effect,macro_rate_sensitive,-0.012,0.014,-0.037,0.016,1.0
-alpha_category[tech_cycle],category_effect,tech_cycle,0.016,0.014,-0.012,0.042,1.0
-alpha_category[economically_cyclical],category_effect,economically_cyclical,0.009,0.015,-0.018,0.037,1.0
-alpha_category[regulatory_idiosyncratic],category_effect,regulatory_idiosyncratic,0.023,0.014,-0.004,0.05,1.0
-alpha_category[defensive_baseline],category_effect,defensive_baseline,-0.034,0.014,-0.061,-0.01,1.0
-beta_sp500,macro_effect,,0.004,0.002,-0.001,0.008,1.0
-beta_vix,macro_effect,,0.006,0.002,0.001,0.01,1.0
-nu,global,,1.146,0.047,1.056,1.232,1.0
-sigma,global,,0.076,0.003,0.071,0.082,1.0
+mu_global,global_or_hyper,,0.128,0.015,0.098,0.156,1.01
+sigma_ticker,global_or_hyper,,0.122,0.013,0.099,0.146,1.0
+beta_sp500,global_or_hyper,,0.013,0.003,0.007,0.019,1.0
+beta_vix,global_or_hyper,,0.013,0.004,0.007,0.02,1.0
+sigma,global_or_hyper,,0.141,0.003,0.136,0.147,1.0

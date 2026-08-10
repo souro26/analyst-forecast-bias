@@ -95,8 +95,14 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
     df = panel.merge(features, on=["act_symbol", "period_end_date"], how="left")
     log.info(f"  Merged shape: {df.shape}")
 
-    # Confirm macro columns present
-    for col in ["sp500_return_z", "vix_mean_z"]:
+    required_macro_cols = [
+        "sp500_return",
+        "vix_mean",
+        "sp500_return_pit",
+        "vix_mean_pit",
+    ]
+
+    for col in required_macro_cols:
         if col not in df.columns:
             raise ValueError(
                 f"Column '{col}' not found in panel. "
@@ -106,6 +112,22 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
     # Exclude partial year 2026
     df = df[df["year"] < 2026].copy()
     log.info(f"  After excluding 2026: {len(df):,} rows")
+
+    # Standardize already-PIT-safe macro variables using the model sample.
+    # The PIT construction itself is performed in macro.py before this step.
+    sp500_mean = df["sp500_return_pit"].mean()
+    sp500_std = df["sp500_return_pit"].std()
+
+    vix_mean = df["vix_mean_pit"].mean()
+    vix_std = df["vix_mean_pit"].std()
+
+    df["sp500_pit_scaled"] = (
+        (df["sp500_return_pit"] - sp500_mean) / sp500_std
+    )
+
+    df["vix_pit_scaled"] = (
+        (df["vix_mean_pit"] - vix_mean) / vix_std
+    )
 
     # Encode category as integer index
     df["category_idx"] = pd.Categorical(
@@ -135,16 +157,16 @@ def build_model(df: pd.DataFrame, target_col: str) -> pm.Model:
     n_tickers = len(df["ticker_idx"].unique())
 
     ticker_idx = df["ticker_idx"].values
-    sp500_z    = df["sp500_return_z"].values.astype(float)
-    vix_z      = df["vix_mean_z"].values.astype(float)
+    sp500_pit = df["sp500_pit_scaled"].values.astype(float)
+    vix_pit   = df["vix_pit_scaled"].values.astype(float)
     
     # Target column check
     y = df[target_col].values.astype(float)
     valid_mask = ~np.isnan(y)
     y = y[valid_mask]
     ticker_idx = ticker_idx[valid_mask]
-    sp500_z = sp500_z[valid_mask]
-    vix_z = vix_z[valid_mask]
+    sp500_pit = sp500_pit[valid_mask]
+    vix_pit = vix_pit[valid_mask]
 
     # Map each unique ticker to its corresponding category index
     ticker_cat_idx = df.drop_duplicates("ticker_idx").sort_values("ticker_idx")["category_idx"].values
@@ -156,21 +178,17 @@ def build_model(df: pd.DataFrame, target_col: str) -> pm.Model:
         # Global bias intercept
         mu_global      = pm.Normal("mu_global", mu=0.0, sigma=0.5)
         
-        # Category-level hyperpriors
-        sigma_category = pm.HalfNormal("sigma_category", sigma=0.3)
-        alpha_category = pm.Normal(
-            "alpha_category",
-            mu=0.0,
-            sigma=sigma_category,
-            shape=n_categories,
-        )
-
         # Ticker-level partial pooling (Non-centered parameterization)
-        sigma_ticker   = pm.HalfNormal("sigma_ticker", sigma=0.3)
-        alpha_ticker_offset = pm.Normal("alpha_ticker_offset", mu=0.0, sigma=1.0, shape=n_tickers)
-        alpha_ticker   = pm.Deterministic(
+        sigma_ticker = pm.HalfNormal("sigma_ticker", sigma=0.2)
+        alpha_ticker_offset = pm.Normal(
+            "alpha_ticker_offset",
+            mu=0.0,
+            sigma=1.0,
+            shape=n_tickers,
+        )
+        alpha_ticker = pm.Deterministic(
             "alpha_ticker",
-            alpha_category[ticker_cat_idx] + alpha_ticker_offset * sigma_ticker
+            alpha_ticker_offset * sigma_ticker,
         )
 
         # Continuous macro effects (explanatory)
@@ -181,13 +199,13 @@ def build_model(df: pd.DataFrame, target_col: str) -> pm.Model:
         mu = (
             mu_global
             + alpha_ticker[ticker_idx]
-            + beta_sp500 * sp500_z
-            + beta_vix   * vix_z
+            + beta_sp500 * sp500_pit
+            + beta_vix   * vix_pit
         )
 
-        # Student-t likelihood to handle heavy tails robustly
-        nu    = pm.Gamma("nu", alpha=2, beta=0.1)
-        sigma = pm.HalfNormal("sigma", sigma=0.3)
+        # Student-t likelihood to handle heavy tails robustly (nu > 2 prior)
+        nu = 5.0
+        sigma = pm.HalfNormal("sigma", sigma=0.2)
 
         pm.StudentT(
             "y",
@@ -228,21 +246,17 @@ def build_time_effect_model(df: pd.DataFrame, target_col: str) -> pm.Model:
         # Global intercept
         mu_global      = pm.Normal("mu_global", mu=0.0, sigma=0.5)
         
-        # Category-level hyperpriors
-        sigma_category = pm.HalfNormal("sigma_category", sigma=0.3)
-        alpha_category = pm.Normal(
-            "alpha_category",
-            mu=0.0,
-            sigma=sigma_category,
-            shape=n_categories,
-        )
-
         # Ticker-level partial pooling (Non-centered parameterization)
-        sigma_ticker   = pm.HalfNormal("sigma_ticker", sigma=0.3)
-        alpha_ticker_offset = pm.Normal("alpha_ticker_offset", mu=0.0, sigma=1.0, shape=n_tickers)
-        alpha_ticker   = pm.Deterministic(
+        sigma_ticker = pm.HalfNormal("sigma_ticker", sigma=0.2)
+        alpha_ticker_offset = pm.Normal(
+            "alpha_ticker_offset",
+            mu=0.0,
+            sigma=1.0,
+            shape=n_tickers,
+        )
+        alpha_ticker = pm.Deterministic(
             "alpha_ticker",
-            alpha_category[ticker_cat_idx] + alpha_ticker_offset * sigma_ticker
+            alpha_ticker_offset * sigma_ticker,
         )
 
         # Quarter-level time effects (Non-centered parameterization)
@@ -260,9 +274,9 @@ def build_time_effect_model(df: pd.DataFrame, target_col: str) -> pm.Model:
             + alpha_quarter[quarter_idx]
         )
 
-        # Student-t likelihood to handle heavy tails robustly
-        nu    = pm.Gamma("nu", alpha=2, beta=0.1)
-        sigma = pm.HalfNormal("sigma", sigma=0.3)
+        # Student-t likelihood to handle heavy tails robustly (nu > 2 prior)
+        nu = 5.0
+        sigma = pm.HalfNormal("sigma", sigma=0.2)
 
         pm.StudentT(
             "y",
@@ -281,7 +295,7 @@ def sample_model(
     draws: int = 2000,
     tune: int = 1000,
     chains: int = 4,
-    target_accept: float = 0.95,
+    target_accept: float = 0.99,
     random_seed: int = 42,
 ) -> az.InferenceData:
     """Sample from the posterior using NUTS."""
@@ -300,6 +314,7 @@ def sample_model(
                 random_seed=random_seed,
                 progressbar=True,
                 return_inferencedata=True,
+                max_treedepth=12,
             )
 
     log.info("  Sampling complete.")
@@ -311,7 +326,7 @@ def check_convergence(trace: az.InferenceData) -> bool:
     log.info("Checking convergence diagnostics...")
 
     available_vars = list(trace.posterior.data_vars.keys())
-    vars_to_check = ["mu_global", "sigma_category", "sigma_ticker", "nu", "sigma"]
+    vars_to_check = ["mu_global", "sigma_ticker", "sigma"]
     for v in ["sigma_quarter", "beta_sp500", "beta_vix"]:
         if v in available_vars:
             vars_to_check.append(v)
@@ -344,7 +359,7 @@ def check_convergence(trace: az.InferenceData) -> bool:
 
     converged = (max_rhat <= 1.01) and (min_ess >= 400) and (divergences == 0)
     log.info(f"  Convergence: {'PASSED' if converged else 'FAILED/WARNING'}")
-    return converged
+    return bool(converged)
 
 
 def extract_results(trace: az.InferenceData, target_name: str) -> pd.DataFrame:
@@ -354,7 +369,7 @@ def extract_results(trace: az.InferenceData, target_name: str) -> pd.DataFrame:
     records = []
     available_vars = list(trace.posterior.data_vars.keys())
 
-    vars_to_extract = ["mu_global", "sigma_category", "sigma_ticker", "sigma_quarter", "beta_sp500", "beta_vix", "nu", "sigma"]
+    vars_to_extract = ["mu_global", "sigma_ticker", "sigma_quarter", "beta_sp500", "beta_vix", "sigma"]
     for var in vars_to_extract:
         if var in available_vars:
             s = az.summary(trace, var_names=[var])
@@ -363,22 +378,6 @@ def extract_results(trace: az.InferenceData, target_name: str) -> pd.DataFrame:
                 "parameter": var,
                 "type": "global_or_hyper",
                 "category": None,
-                "mean": row["mean"],
-                "sd": row["sd"],
-                "hdi_3%": row["hdi_3%"],
-                "hdi_97%": row["hdi_97%"],
-                "r_hat": row["r_hat"],
-            })
-
-    # alpha_category
-    if "alpha_category" in available_vars:
-        alpha_summary = az.summary(trace, var_names=["alpha_category"])
-        for i, cat in enumerate(CATEGORY_ORDER):
-            row = alpha_summary.iloc[i]
-            records.append({
-                "parameter": f"alpha_category[{cat}]",
-                "type": "category_effect",
-                "category": cat,
                 "mean": row["mean"],
                 "sd": row["sd"],
                 "hdi_3%": row["hdi_3%"],

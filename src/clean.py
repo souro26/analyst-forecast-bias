@@ -32,6 +32,7 @@ import yaml
 import numpy as np 
 import pandas as pd
 from pathlib import Path
+from datetime import datetime
 
 ROOT         = Path(__file__).resolve().parent.parent
 CONFIG_PATH  = ROOT / "configs" / "model_params.yml"

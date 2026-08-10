@@ -148,17 +148,14 @@ def build_features(estimate: pd.DataFrame) -> pd.DataFrame:
     
     log.info(f"  Current Quarter snapshots: {len(cq):,} rows")
     
-    # Convert dates to datetime
     cq["date"] = pd.to_datetime(cq["date"])
     cq["prediction_cutoff"] = pd.to_datetime(cq["prediction_cutoff"])
     cq["period_end_date"] = pd.to_datetime(cq["period_end_date"])
 
-    # 1. 16-week window filtering: cutoff - 112 days <= snapshot_date < cutoff
     start_dates = cq["prediction_cutoff"] - pd.Timedelta(days=112)
     cq_filtered = cq[(cq["date"] >= start_dates) & (cq["date"] < cq["prediction_cutoff"])].copy()
     log.info(f"  Snapshots within 16-week pre-cutoff window: {len(cq_filtered):,} rows")
 
-    # 2. PIT Validation check AFTER the 16-week filtering
     validate_point_in_time_features(cq_filtered, "date", "prediction_cutoff")
 
     records = []
@@ -194,6 +191,41 @@ def build_features(estimate: pd.DataFrame) -> pd.DataFrame:
     return features_df
 
 
+def restrict_to_prediction_events(
+    features: pd.DataFrame,
+    panel: pd.DataFrame,
+) -> pd.DataFrame:
+    """Restrict features to prediction events for which a realized target
+    exists in the cleaned panel."""
+    panel_keys = panel[["act_symbol", "period_end_date"]].drop_duplicates().copy()
+    panel_keys["period_end_date"] = pd.to_datetime(panel_keys["period_end_date"])
+
+    features = features.copy()
+    features["period_end_date"] = pd.to_datetime(features["period_end_date"])
+
+    before = len(features)
+
+    features = features.merge(
+        panel_keys,
+        on=["act_symbol", "period_end_date"],
+        how="inner",
+        validate="one_to_one",
+    )
+
+    removed = before - len(features)
+
+    log.info(
+        f"  Restricted features to cleaned prediction-event universe: "
+        f"{len(features):,} rows"
+    )
+    log.info(
+        f"  Removed orphan feature events without realized targets: "
+        f"{removed:,} rows"
+    )
+
+    return features
+
+
 def validate_features(features: pd.DataFrame, panel: pd.DataFrame) -> None:
     """Check merge coverage and feature null rates."""
     log.info("Validating features...")
@@ -204,6 +236,21 @@ def validate_features(features: pd.DataFrame, panel: pd.DataFrame) -> None:
     covered     = panel_keys & feature_keys
     not_covered = panel_keys - feature_keys
  
+    feature_only = feature_keys - panel_keys
+
+    log.info(
+        f"  Feature ticker-quarters without panel target: {len(feature_only):,}"
+    )
+
+    if feature_only:
+        log.error("  Feature table contains events outside the prediction-event universe:")
+        for sym, dt in sorted(feature_only):
+            log.error(f"    {sym:6s}  {dt.date()}")
+        raise ValueError(
+            f"Found {len(feature_only)} feature events without corresponding "
+            "prediction targets in panel."
+        )
+
     log.info(f"  Panel ticker-quarters          : {len(panel_keys):,}")
     log.info(f"  Feature ticker-quarters        : {len(feature_keys):,}")
     log.info(f"  Panel rows with features       : {len(covered):,}")
@@ -237,6 +284,12 @@ def main() -> None:
     log.info(f"Loaded panel         : {len(panel):,} rows")
  
     features = build_features(estimate)
+
+    features = restrict_to_prediction_events(
+        features,
+        panel,
+    )
+
     validate_features(features, panel)
  
     features.to_parquet(OUT_FEATURES, index=False)

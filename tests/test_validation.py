@@ -112,7 +112,7 @@ def test_generate_temporal_audit_report(tmp_path):
     ]
 
     out_file = tmp_path / "temporal_audit.json"
-    generate_temporal_audit_report(estimate, macro_audit, folds, str(out_file))
+    generate_temporal_audit_report(estimate, estimate, macro_audit, folds, str(out_file))
 
     # Read and assert
     import json
@@ -120,7 +120,8 @@ def test_generate_temporal_audit_report(tmp_path):
         report = json.load(f)
     
     assert report["total_prediction_events"] == 1
-    assert report["future_feature_observations"] == 0
+    assert report["raw_future_estimate_observations"] == 0
     assert report["future_macro_observations"] == 1  # 1 violation counted
-    assert report["cutoff_equal_feature_observations"] == 0
+    assert report["raw_cutoff_equal_estimate_observations"] == 0
     assert report["train_test_temporal_violations"] == 0
+    assert report["feature_pit_validation"] == "performed_in_features.py"

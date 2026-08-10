@@ -1,0 +1,9 @@
+{
+    "total_prediction_events": 2359,
+    "events_with_missing_cutoff": 0,
+    "raw_future_estimate_observations": 11482,
+    "raw_cutoff_equal_estimate_observations": 443,
+    "future_macro_observations": 0,
+    "feature_pit_validation": "performed_in_features.py",
+    "train_test_temporal_violations": 0
+}

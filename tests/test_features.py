@@ -1,9 +1,13 @@
-"""Tests for src/features.py — compute_slope, compute_features, and build_features."""
-
 import numpy as np
 import pandas as pd
 import pytest
-from src.features import compute_slope, compute_features, build_features
+from src.features import (
+    compute_slope,
+    compute_features,
+    build_features,
+    restrict_to_prediction_events,
+    validate_features
+)
 
 
 def test_compute_slope_basic():
@@ -38,7 +42,7 @@ def test_compute_features_shape():
         "count": [10, 10, 11, 11, 12, 12, 12, 13],
     })
 
-    cutoff = pd.Timestamp("2020-03-31")
+    cutoff = pd.Timestamp("2020-04-07")
     feats = compute_features(group, cutoff)
 
     assert isinstance(feats, dict)
@@ -135,3 +139,33 @@ def test_build_features_sparse_and_duplicates():
     assert features_df.loc[0, "weeks_of_data"] == 2
     # No snapshot exists on or before 2020-02-04 (cutoff - 56 days), so final_vs_initial must be NaN
     assert np.isnan(features_df.loc[0, "final_vs_initial"])
+
+
+def test_restrict_and_validate_features():
+    panel = pd.DataFrame({
+        "act_symbol": ["AAPL", "JPM"],
+        "period_end_date": pd.to_datetime(["2020-03-31", "2020-03-31"]),
+    })
+
+    features = pd.DataFrame({
+        "act_symbol": ["AAPL", "JPM", "XOM"],  # XOM is orphan
+        "period_end_date": pd.to_datetime(["2020-03-31", "2020-03-31", "2020-03-31"]),
+        "revision_slope": [0.1, -0.2, 0.05],
+        "revision_acceleration": [0.01, -0.01, 0.0],
+        "direction_changes": [1, 2, 0],
+        "final_vs_initial": [0.05, -0.1, 0.02],
+        "spread_trend": [-0.01, -0.02, -0.01],
+        "analyst_count_trend": [0.1, 0.0, 0.1],
+    })
+
+    # Validate fails before restriction because of XOM orphan
+    with pytest.raises(ValueError, match="Found 1 feature events without corresponding"):
+        validate_features(features, panel)
+
+    # Restrict to prediction events
+    restricted = restrict_to_prediction_events(features, panel)
+    assert len(restricted) == 2
+    assert "XOM" not in restricted["act_symbol"].values
+
+    # Validate passes after restriction
+    validate_features(restricted, panel)
