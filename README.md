@@ -17,9 +17,9 @@
 
 ---
 
-Every quarter, Wall Street analysts publish their earnings estimates for publicly traded companies. These estimates get aggregated into a consensus figure that the market prices in ahead of the actual announcement. When a company reports, the difference between what it actually earned and what analysts expected is the forecast error - and the direction of that error is whether the company "beat" or "missed."
+Every quarter, Wall Street analysts publish their earnings estimates for publicly traded companies. These estimates get aggregated into a consensus figure that the market prices in ahead of the actual announcement. When a company reports, the difference between what it actually earned and what analysts expected is the forecast error - and the direction of that error is whether the company beat or missed.
 
-The well-documented pattern is that companies beat more often than they miss. Across this dataset of 72 large-cap US companies over nine years, the overall beat rate is around 82%. That alone is not surprising - it is a known feature of how the analyst ecosystem works, driven partly by management guidance, partly by how estimates get revised as the quarter progresses, and partly by the structural incentives analysts face. What is less well understood is how that bias is distributed: which types of companies carry most of it, whether market conditions change how large it is, and whether the footprint left by the revision process itself contains any signal about what is coming.
+The well-documented pattern is that companies beat more often than they miss. Across this dataset of 72 large-cap US companies over nine years, the overall beat rate is around 82%. That alone is not surprising, it is a known feature of how the analyst ecosystem works, driven partly by management guidance, partly by how estimates get revised as the quarter progresses, and partly by the structural incentives analysts face. What is less well understood is how that bias is distributed: which types of companies carry most of it, whether market conditions change how large it is, and whether the footprint left by the revision process itself contains any signal about what is coming.
 
 Those three questions are what this project is built around.
 
@@ -27,7 +27,7 @@ Those three questions are what this project is built around.
   <img src="reports/figures/02_beat_rate_by_category.png" width="760" alt="Analyst beat rate by earnings-driver category (2017-2026)">
 </p>
 
-The 72 companies are split into six earnings-driver categories - not by sector, but by the primary mechanism that drives their earnings. Tech cycle companies (NVDA, ASML, AMD) are driven by product and semiconductor cycles. Macro rate sensitive (JPM, GS, BAC) move with the rate environment. Commodity driven (XOM, CVX, COP) follow oil and metals prices. Economically cyclical (CAT, AMZN, HD) track the broader economic cycle. Regulatory idiosyncratic (LLY, PFE, UNH) turn on FDA approvals and policy decisions. Defensive baseline (PG, KO, WMT) is the control group - stable, predictable businesses with deep analyst coverage, chosen specifically because they should show the least distortion if the patterns found elsewhere are real.
+The 72 companies are split into six earnings-driver categories, not by sector, but by the primary mechanism that drives their earnings. Tech cycle companies (NVDA, ASML, AMD) are driven by product and semiconductor cycles. Macro rate sensitive (JPM, GS, BAC) move with the rate environment. Commodity driven (XOM, CVX, COP) follow oil and metals prices. Economically cyclical (CAT, AMZN, HD) track the broader economic cycle. Regulatory idiosyncratic (LLY, PFE, UNH) turn on FDA approvals and policy decisions. Defensive baseline (PG, KO, WMT) is the control group - stable, predictable businesses with deep analyst coverage, chosen specifically because they should show the least distortion if the patterns found elsewhere are real.
 
 ---
 
@@ -53,11 +53,11 @@ The chart above shows how consensus estimates move in the 16 weeks before each a
 
 ---
 
-## What We Found
+## What I Found
 
-**The macro environment matters, but through uncertainty rather than direction.** In the Bayesian model, quarterly VIX has a credible positive effect on forecast error - analysts miss more when uncertainty is high. The S&P 500 return for the same quarter has no credible effect. That is a sharper claim than the usual observation that bear markets cause more misses: the data says it is volatility that disrupts forecasting, not the direction the market went.
+**The macro environment matters, but through uncertainty rather than direction.** In the Bayesian model, quarterly VIX has a credible positive effect on forecast error, meaning analysts miss more when uncertainty is high. The S&P 500 return for the same quarter has no credible effect. That is a sharper claim than the usual observation that bear markets cause more misses: the data says it is volatility that disrupts forecasting, not the direction the market went.
 
-**Bias is structural and category-dependent, and the control group validates the design.** Bootstrap confidence intervals across 10,000 resamples exclude zero for all six categories, with means ranging from 0.054 EPS (defensive baseline) to 0.249 EPS (macro rate sensitive). In the Bayesian model, defensive baseline is the only category whose posterior credible interval excludes zero on the negative side - in other words, it is the only group the model is confident is less biased than average. That is what you want a control group to do. The notable outlier is economically cyclical in 2022, the only year in the entire dataset where a category showed negative mean forecast error, meaning analysts overestimated. It happened in the one year a rate shock hit consumer and industrial spending hard enough to outpace how quickly estimates moved.
+**Bias is structural and category-dependent, and the control group validates the design.** Bootstrap confidence intervals across 10,000 resamples exclude zero for all six categories, with means ranging from 0.054 EPS (defensive baseline) to 0.249 EPS (macro rate sensitive). In the Bayesian model, defensive baseline is the only category whose posterior credible interval excludes zero on the negative side. In other words, it is the only group the model is confident is less biased than average. That is what you want a control group to do. The notable outlier is economically cyclical in 2022, the only year in the entire dataset where a category showed negative mean forecast error, meaning analysts overestimated. It happened in the one year a rate shock hit consumer and industrial spending hard enough to outpace how quickly estimates moved.
 
 <p align="center">
   <img src="reports/figures/02_yearly_trend_by_category.png" width="760" alt="Forecast error trend by category across market regimes (2017-2025)">
