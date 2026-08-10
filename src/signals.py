@@ -87,8 +87,6 @@ TRAIN_YEARS = list(range(2017, 2023))   # 2017-2022
 TEST_YEARS  = list(range(2023, 2026))   # 2023-2025
 
 
-# ── 1. Data preparation ───────────────────────────────────────────────────────
-
 def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
     """
     Merge panel and features, encode categoricals, validate no leakage.
@@ -100,22 +98,18 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
     df = panel.merge(features, on=["act_symbol", "period_end_date"], how="inner")
     log.info(f"  Merged shape: {df.shape}")
 
-    # Exclude 2026 partial year
     df = df[df["year"] < 2026].copy()
 
-    # Drop rows missing target or key features
     before = len(df)
     df = df.dropna(subset=["beat", "revision_slope", "sp500_return_z"])
     after = len(df)
     if before - after > 0:
         log.warning(f"  Dropped {before - after} rows with missing values.")
 
-    # Encode category as integer
     le = LabelEncoder()
     df["category_encoded"] = le.fit_transform(df["category"])
     log.info(f"  Category encoding: {dict(zip(le.classes_, le.transform(le.classes_)))}")
 
-    # Target
     df["beat"] = df["beat"].astype(int)
 
     log.info(f"  Final rows: {len(df):,}")
@@ -125,8 +119,6 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
 
     return df, le
 
-
-# ── 2. Train/test split ───────────────────────────────────────────────────────
 
 def split_data(df: pd.DataFrame) -> tuple:
     """
@@ -146,8 +138,6 @@ def split_data(df: pd.DataFrame) -> tuple:
 
     return X_train, X_test, y_train, y_test, train, test
 
-
-# ── 3. Train XGBoost ─────────────────────────────────────────────────────────
 
 def train_model(
     X_train: pd.DataFrame,
@@ -191,8 +181,6 @@ def train_model(
     return model
 
 
-# ── 4. Evaluate ───────────────────────────────────────────────────────────────
-
 def evaluate(
     model: xgb.XGBClassifier,
     X_test: pd.DataFrame,
@@ -226,7 +214,6 @@ def evaluate(
     log.info(f"    TN={cm[0,0]}  FP={cm[0,1]}")
     log.info(f"    FN={cm[1,0]}  TP={cm[1,1]}")
 
-    # Per-category AUC
     log.info("  AUC-ROC by category:")
     results_df = test_df.copy()
     results_df["beat_proba"] = proba
@@ -244,8 +231,6 @@ def evaluate(
 
     return results_df
 
-
-# ── 5. Feature importance ─────────────────────────────────────────────────────
 
 def get_feature_importance(
     model: xgb.XGBClassifier,
@@ -273,31 +258,23 @@ def get_feature_importance(
     return imp_df
 
 
-# ── 6. Main ───────────────────────────────────────────────────────────────────
-
 def main() -> None:
     log.info("=" * 60)
     log.info(f"signals.py started at {datetime.now().isoformat()}")
     log.info("=" * 60)
 
-    # Step 1 — Load data
     df, le = load_and_prepare(PANEL_PATH, FEATURES_PATH)
 
-    # Step 2 — Split
     log.info("Splitting data...")
     X_train, X_test, y_train, y_test, train_df, test_df = split_data(df)
 
-    # Step 3 — Train
     log.info("Training XGBoost classifier...")
     model = train_model(X_train, y_train, X_test, y_test)
 
-    # Step 4 — Evaluate
     results_df = evaluate(model, X_test, y_test, test_df)
 
-    # Step 5 — Feature importance
     imp_df = get_feature_importance(model)
 
-    # Step 6 — Save outputs
     model.save_model(str(OUT_MODEL))
     log.info(f"Written: {OUT_MODEL}")
 

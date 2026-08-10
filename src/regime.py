@@ -99,8 +99,7 @@ def fit_hmm(returns: pd.DataFrame, n_states: int = 3, n_iter: int = 100, random_
         log.info("  HMM converged.")
     
     state_sequence = model.predict(X)
-    
-    # Log what each raw state looks like
+
     log.info("  Raw state statistics (before labelling):")
     for s in range(n_states):
         mask = state_sequence == s
