@@ -1,0 +1,72 @@
+stages:
+
+  ingest:
+    cmd: python src/ingest.py
+    deps:
+      - src/ingest.py
+      - configs/model_params.yml
+      - data/raw/eps_history_full.csv
+      - data/raw/eps_estimate_full.csv
+    outs:
+      - data/raw/eps_history.csv
+      - data/raw/eps_estimate.csv
+
+  clean:
+    cmd: python src/clean.py
+    deps:
+      - src/clean.py
+      - configs/model_params.yml
+      - data/raw/eps_history.csv
+      - data/raw/eps_estimate.csv
+    outs:
+      - data/processed/panel.parquet
+      - data/processed/estimate_panel.parquet
+
+  macro:
+    cmd: python src/macro.py
+    deps:
+      - src/macro.py
+      - data/processed/panel.parquet
+    outs:
+      - data/processed/macro.parquet
+      - data/processed/panel_macro.parquet
+
+  regime:
+    cmd: python src/regime.py
+    deps:
+      - src/regime.py
+      - configs/model_params.yml
+    outs:
+      - data/processed/regimes.parquet
+
+  features:
+    cmd: python src/features.py
+    deps:
+      - src/features.py
+      - configs/model_params.yml
+      - data/processed/estimate_panel.parquet
+    outs:
+      - data/processed/features.parquet
+
+  models:
+    cmd: python src/models.py
+    deps:
+      - src/models.py
+      - configs/model_params.yml
+      - data/processed/panel_macro.parquet
+      - data/processed/features.parquet
+    outs:
+      - models/trace.nc
+      - models/summary.csv
+
+  signals:
+    cmd: python src/signals.py
+    deps:
+      - src/signals.py
+      - configs/model_params.yml
+      - data/processed/panel_macro.parquet
+      - data/processed/features.parquet
+    outs:
+      - models/xgb_model.json
+      - models/xgb_results.csv
+      - models/xgb_feature_importance.csv

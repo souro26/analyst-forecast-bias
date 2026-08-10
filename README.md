@@ -122,10 +122,14 @@ cd ../../..
 # Optional - only needed if HMM fails to converge
 echo "FRED_API_KEY=your_key" > .env
 
-# Run the full pipeline with make (Unix / macOS / WSL on Windows)
+# Option A: DVC (tracks which stages need re-running based on file hashes)
+dvc init   # first time only - creates .dvc/ directory
+dvc repro
+
+# Option B: make (Unix / macOS / WSL on Windows)
 make
 
-# Or run each step manually in order
+# Option C: run each step manually in order
 python src/ingest.py
 python src/clean.py
 python src/macro.py
@@ -135,7 +139,7 @@ python src/models.py      # ~20 min on 4 cores
 python src/signals.py
 ```
 
-The Makefile uses stamp files (`.stamps/`) to track which stages have run. `make` will only re-execute a stage if its source files (`src/`, `configs/`) have changed since it last ran. On Windows, install GNU make via Git Bash, WSL, or `choco install make`.
+`dvc repro` uses [`dvc.yaml`](dvc.yaml) to re-run only stages whose inputs have changed since the last run. `make` does the same via stamp files (`.stamps/`). Both require the Dolt data pull above as a prerequisite. On Windows, GNU make is available via Git Bash, WSL, or `choco install make`.
 
 Logs for each step are written to `logs/`. All model outputs go to `models/`, all figures to `reports/figures/`.
 

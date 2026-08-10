@@ -62,10 +62,11 @@ PROCESSED     = ROOT / "data" / "processed"
 MODELS_DIR    = ROOT / "models"
 LOG_DIR       = ROOT / "logs"
 
-PANEL_PATH    = PROCESSED / "panel.parquet"
-FEATURES_PATH = PROCESSED / "features.parquet"
-TRACE_PATH    = MODELS_DIR / "trace.nc"
-SUMMARY_PATH  = MODELS_DIR / "summary.csv"
+PANEL_PATH       = PROCESSED / "panel.parquet"
+PANEL_MACRO_PATH = PROCESSED / "panel_macro.parquet"
+FEATURES_PATH    = PROCESSED / "features.parquet"
+TRACE_PATH       = MODELS_DIR / "trace.nc"
+SUMMARY_PATH     = MODELS_DIR / "summary.csv"
 
 MODELS_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
@@ -349,7 +350,7 @@ def main() -> None:
     log.info(f"models.py started at {datetime.now().isoformat()}")
     log.info("=" * 60)
 
-    df    = load_and_prepare(PANEL_PATH, FEATURES_PATH)
+    df    = load_and_prepare(PANEL_MACRO_PATH, FEATURES_PATH)
     model = build_model(df)
     trace = sample_model(model)
 

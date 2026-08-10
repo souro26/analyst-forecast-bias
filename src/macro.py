@@ -33,8 +33,9 @@ ROOT        = Path(__file__).resolve().parent.parent
 PROCESSED   = ROOT / "data" / "processed"
 LOG_DIR     = ROOT / "logs"
 
-PANEL_PATH  = PROCESSED / "panel.parquet"
-MACRO_PATH  = PROCESSED / "macro.parquet"
+PANEL_PATH       = PROCESSED / "panel.parquet"
+PANEL_MACRO_PATH = PROCESSED / "panel_macro.parquet"
+MACRO_PATH       = PROCESSED / "macro.parquet"
 
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -203,8 +204,8 @@ def main() -> None:
 
     panel = merge_onto_panel(panel, macro)
 
-    panel.to_parquet(PANEL_PATH, index=False)
-    log.info(f"Updated: {PANEL_PATH}  (now includes sp500_return, vix_mean columns)")
+    panel.to_parquet(PANEL_MACRO_PATH, index=False)
+    log.info(f"Written: {PANEL_MACRO_PATH}  (panel + sp500_return + vix_mean)")
 
     log.info("=" * 60)
     log.info(f"macro.py complete at {datetime.now().isoformat()}")

@@ -49,7 +49,8 @@ PROCESSED    = ROOT / "data" / "processed"
 MODELS_DIR   = ROOT / "models"
 LOG_DIR      = ROOT / "logs"
 
-PANEL_PATH   = PROCESSED / "panel.parquet"
+PANEL_PATH    = PROCESSED / "panel.parquet"
+PANEL_MACRO_PATH = PROCESSED / "panel_macro.parquet"
 FEATURES_PATH = PROCESSED / "features.parquet"
 
 OUT_MODEL       = MODELS_DIR / "xgb_model.json"
@@ -263,7 +264,7 @@ def main() -> None:
     log.info(f"signals.py started at {datetime.now().isoformat()}")
     log.info("=" * 60)
 
-    df, le = load_and_prepare(PANEL_PATH, FEATURES_PATH)
+    df, le = load_and_prepare(PANEL_MACRO_PATH, FEATURES_PATH)
 
     log.info("Splitting data...")
     X_train, X_test, y_train, y_test, train_df, test_df = split_data(df)
