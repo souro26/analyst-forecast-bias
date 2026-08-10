@@ -8,6 +8,7 @@ Downloads S&P 500 returns and VIX prices via yfinance, and prepares:
 Outputs:
     - data/processed/panel_macro.parquet   (updated with both explanatory and predictive macro variables)
     - data/processed/macro.parquet         (quarterly macro indicators, for reference)
+    - data/processed/macro_audit.parquet   (contains metadata for validating macro PIT cutoff dates)
     - logs/macro.log
 
 Usage:
@@ -26,9 +27,10 @@ ROOT        = Path(__file__).resolve().parent.parent
 PROCESSED   = ROOT / "data" / "processed"
 LOG_DIR     = ROOT / "logs"
 
-PANEL_PATH       = PROCESSED / "panel.parquet"
-PANEL_MACRO_PATH = PROCESSED / "panel_macro.parquet"
-MACRO_PATH       = PROCESSED / "macro.parquet"
+PANEL_PATH        = PROCESSED / "panel.parquet"
+PANEL_MACRO_PATH  = PROCESSED / "panel_macro.parquet"
+MACRO_PATH        = PROCESSED / "macro.parquet"
+MACRO_AUDIT_PATH  = PROCESSED / "macro_audit.parquet"
 
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -42,6 +44,16 @@ logging.basicConfig(
     ],
 )
 log = logging.getLogger(__name__)
+
+
+def assign_fiscal_quarter(period_end_date: pd.Series) -> pd.Series:
+    """Assign fiscal quarter based on period end date."""
+    month = period_end_date.dt.month
+    return pd.cut(
+        month,
+        bins = [0,3,6,9,12],
+        labels = [1,2,3,4],
+    ).astype(int)
 
 
 def get_sp500_quarterly(start: str = "2016-10-01", end: str = "2026-07-01") -> pd.DataFrame:
@@ -103,7 +115,6 @@ def build_macro_table(sp500: pd.DataFrame, vix: pd.DataFrame) -> pd.DataFrame:
 
     macro = sp500.join(vix, how="inner")
 
-    # Explanatory variables are globally standardized for descriptive analysis
     macro["sp500_return_z"] = (
         (macro["sp500_return"] - macro["sp500_return"].mean())
         / macro["sp500_return"].std()
@@ -119,15 +130,17 @@ def compute_pit_macro(
     panel: pd.DataFrame,
     gspc_close: pd.Series,
     vix_close: pd.Series
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Computes point-in-time (PIT) S&P 500 return and average VIX for each observation.
     Uses strictly lookback data before prediction_cutoff:
     [prediction_cutoff - 112 days, prediction_cutoff)
+    Also constructs macro_audit_df to track exact maximum timestamps used for validation.
     """
     panel = panel.copy()
     sp500_pit_vals = []
     vix_pit_vals = []
+    audit_records = []
 
     # Sort indexes of series to be absolutely sure of order
     gspc_close = gspc_close.sort_index()
@@ -140,6 +153,7 @@ def compute_pit_macro(
         # 1. S&P 500 PIT Return: from 112 days ago to cutoff (exclusive)
         gspc_before = gspc_close[gspc_close.index < cutoff]
         if len(gspc_before) > 0:
+            latest_gspc_date = gspc_before.index[-1]
             p_end = gspc_before.values[-1]
             gspc_start_candidates = gspc_close[gspc_close.index < start_date]
             if len(gspc_start_candidates) > 0:
@@ -148,27 +162,44 @@ def compute_pit_macro(
                 p_start = gspc_before.values[0]
             sp500_return_pit = (p_end - p_start) / p_start
         else:
+            latest_gspc_date = pd.NaT
             sp500_return_pit = np.nan
 
         # 2. VIX PIT Mean: average VIX close over [start_date, cutoff)
         vix_window = vix_close[(vix_close.index >= start_date) & (vix_close.index < cutoff)]
         if len(vix_window) > 0:
+            latest_vix_date = vix_window.index[-1]
             vix_mean_pit = vix_window.mean()
         else:
             vix_before = vix_close[vix_close.index < cutoff]
-            vix_mean_pit = vix_before.values[-1] if len(vix_before) > 0 else np.nan
+            if len(vix_before) > 0:
+                latest_vix_date = vix_before.index[-1]
+                vix_mean_pit = vix_before.values[-1]
+            else:
+                latest_vix_date = pd.NaT
+                vix_mean_pit = np.nan
 
         sp500_pit_vals.append(sp500_return_pit)
         vix_pit_vals.append(vix_mean_pit)
+        
+        audit_records.append({
+            "act_symbol": row["act_symbol"],
+            "period_end_date": row["period_end_date"],
+            "prediction_cutoff": row["prediction_cutoff"],
+            "latest_gspc_date": latest_gspc_date,
+            "latest_vix_date": latest_vix_date,
+        })
 
     panel["sp500_return_pit"] = sp500_pit_vals
     panel["vix_mean_pit"] = vix_pit_vals
-    return panel
+    
+    audit_df = pd.DataFrame(audit_records)
+    return panel, audit_df
 
 
 def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
-    """Merge quarterly explanatory macro indicators onto panel."""
-    log.info("Merging explanatory macro indicators onto panel...")
+    """Merge quarterly explanatory macro indicators onto panel using explicit year/quarter alignment."""
+    log.info("Merging explanatory macro indicators onto panel using explicit quarter alignment...")
 
     panel = panel.copy()
 
@@ -176,19 +207,29 @@ def merge_onto_panel(panel: pd.DataFrame, macro: pd.DataFrame) -> pd.DataFrame:
                           "vix_mean", "vix_mean_z"]].reset_index()
     macro_reset = macro_reset.rename(columns={"quarter_end": "period_end_date"})
     macro_reset["period_end_date"] = pd.to_datetime(macro_reset["period_end_date"])
+    
+    # Calculate year and fiscal_quarter for macro data
+    macro_reset["year"] = macro_reset["period_end_date"].dt.year
+    macro_reset["fiscal_quarter"] = assign_fiscal_quarter(macro_reset["period_end_date"])
 
+    # Ensure year and fiscal_quarter are present in panel
     panel["period_end_date"] = pd.to_datetime(panel["period_end_date"]).astype("datetime64[ns]")
-    macro_reset["period_end_date"] = pd.to_datetime(macro_reset["period_end_date"]).astype("datetime64[ns]")
+    panel["year"] = panel["period_end_date"].dt.year
+    panel["fiscal_quarter"] = assign_fiscal_quarter(panel["period_end_date"])
 
-    panel = panel.sort_values("period_end_date")
-    macro_reset = macro_reset.sort_values("period_end_date")
-
-    panel = pd.merge_asof(
+    # Explicit merge on year and fiscal quarter
+    panel = pd.merge(
         panel,
-        macro_reset,
-        on="period_end_date",
-        direction="nearest",
+        macro_reset.drop(columns=["period_end_date"]),
+        on=["year", "fiscal_quarter"],
+        how="left"
     )
+
+    n_null_sp500 = panel["sp500_return"].isnull().sum()
+    n_null_vix   = panel["vix_mean"].isnull().sum()
+    log.info(f"  sp500_return nulls after merge: {n_null_sp500}")
+    log.info(f"  vix_mean nulls after merge    : {n_null_vix}")
+
     return panel
 
 
@@ -223,15 +264,18 @@ def main() -> None:
     panel = pd.read_parquet(PANEL_PATH)
     log.info(f"Panel loaded: {len(panel):,} rows")
 
-    # 3. Merge explanatory macro indicators
+    # 3. Merge explanatory macro indicators (explicit quarter alignment)
     panel = merge_onto_panel(panel, macro)
 
-    # 4. Compute predictive PIT macro indicators
+    # 4. Compute predictive PIT macro indicators and build audit df
     log.info("Computing point-in-time predictive macro indicators...")
-    panel = compute_pit_macro(panel, gspc_close, vix_close)
+    panel, audit_df = compute_pit_macro(panel, gspc_close, vix_close)
 
     panel.to_parquet(PANEL_MACRO_PATH, index=False)
     log.info(f"Written panel with macro variables: {PANEL_MACRO_PATH}")
+
+    audit_df.to_parquet(MACRO_AUDIT_PATH, index=False)
+    log.info(f"Written macro PIT audit data: {MACRO_AUDIT_PATH}")
 
     log.info("=" * 60)
     log.info(f"macro.py complete at {datetime.now().isoformat()}")

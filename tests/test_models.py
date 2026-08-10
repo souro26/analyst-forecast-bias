@@ -1,4 +1,4 @@
-"""Tests for src/models.py — load_and_prepare, build_model, sample_model, and extract_results."""
+"""Tests for src/models.py — load_and_prepare, build_model, build_time_effect_model, sample_model, and extract_results."""
 
 import os
 from pathlib import Path
@@ -11,6 +11,7 @@ import pytest
 from src.models import (
     load_and_prepare,
     build_model,
+    build_time_effect_model,
     sample_model,
     check_convergence,
     extract_results,
@@ -26,6 +27,7 @@ def mock_data_paths(tmp_path):
         "period_end_date": pd.to_datetime(["2020-03-31", "2020-03-31", "2020-03-31"]),
         "prediction_cutoff": pd.to_datetime(["2020-03-31", "2020-03-31", "2020-03-31"]),
         "year": [2020, 2020, 2020],
+        "fiscal_quarter": [1, 1, 1],
         "category": ["tech_cycle", "macro_rate_sensitive", "commodity_driven"],
         "forecast_error_winsorized": [0.1, 0.2, -0.05],
         "normalized_error_winsorized": [0.05, 0.10, -0.02],
@@ -55,6 +57,7 @@ def test_load_and_prepare(mock_data_paths):
     assert isinstance(df, pd.DataFrame)
     assert "category_idx" in df.columns
     assert "ticker_idx" in df.columns
+    assert "quarter_idx" in df.columns
     assert len(df) == 3
     assert df.loc[df["act_symbol"] == "AAPL", "category_idx"].values[0] == CATEGORY_ORDER.index("tech_cycle")
 
@@ -107,24 +110,28 @@ def test_build_model_raw():
     assert any("sigma" in name for name in varnames)
 
 
-def test_build_model_normalized():
+def test_build_time_effect_model():
     # Make a tiny mock DataFrame with all required columns
     df = pd.DataFrame({
         "act_symbol": ["AAPL", "JPM", "XOM"],
         "category_idx": [0, 1, 2],
         "ticker_idx": [0, 1, 2],
-        "sp500_return_z": [0.1, -0.2, 0.3],
-        "vix_mean_z": [-0.5, 0.2, 0.1],
-        "normalized_error_winsorized": [0.05, 0.15, -0.02],
+        "quarter_idx": [0, 0, 0],
+        "forecast_error_winsorized": [0.05, 0.15, -0.02],
     })
 
-    model = build_model(df, "normalized_error_winsorized")
+    model = build_time_effect_model(df, "forecast_error_winsorized")
     assert isinstance(model, pm.Model)
     
     # Check variables exist in the model
     varnames = [v.name for v in model.value_vars + model.free_RVs]
     assert any("mu_global" in name for name in varnames)
     assert any("alpha_category" in name for name in varnames)
+    assert any("alpha_ticker_offset" in name for name in varnames)
+    assert any("alpha_quarter_offset" in name for name in varnames)
+    assert not any("beta_sp500" in name for name in varnames)
+    assert any("nu" in name for name in varnames)
+    assert any("sigma" in name for name in varnames)
 
 
 def test_sample_model_and_diagnostics():

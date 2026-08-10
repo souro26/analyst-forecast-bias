@@ -10,6 +10,7 @@ Outputs:
     - models/xgb_results.csv
     - models/xgb_feature_importance.csv
     - models/xgb_ablation_results.csv
+    - models/xgb_category_auc.csv
     - reports/temporal_audit.json
     - logs/signals.log
 """
@@ -38,11 +39,13 @@ REPORTS_DIR  = ROOT / "reports"
 PANEL_MACRO_PATH = PROCESSED / "panel_macro.parquet"
 FEATURES_PATH    = PROCESSED / "features.parquet"
 ESTIMATE_PATH    = PROCESSED / "estimate_panel.parquet"
+MACRO_AUDIT_PATH = PROCESSED / "macro_audit.parquet"
 
 OUT_MODEL       = MODELS_DIR / "xgb_model.json"
 OUT_RESULTS     = MODELS_DIR / "xgb_results.csv"
 OUT_IMPORTANCE  = MODELS_DIR / "xgb_feature_importance.csv"
 OUT_ABLATION    = MODELS_DIR / "xgb_ablation_results.csv"
+OUT_CAT_AUC     = MODELS_DIR / "xgb_category_auc.csv"
 OUT_AUDIT       = REPORTS_DIR / "temporal_audit.json"
 
 MODELS_DIR.mkdir(exist_ok=True)
@@ -172,7 +175,7 @@ def get_walk_forward_folds(df: pd.DataFrame) -> list[dict]:
 
 
 def run_ablation_experiments(folds: list[dict]) -> pd.DataFrame:
-    """Run walk-forward evaluation across 8 feature configurations."""
+    """Run walk-forward evaluation across 8 feature configurations with uncertainty quantification."""
     log.info("Running ablation experiments...")
     
     ablation_specs = {
@@ -198,13 +201,9 @@ def run_ablation_experiments(folds: list[dict]) -> pd.DataFrame:
             test_df = fold["test"]
 
             if name == "Majority baseline":
-                # Predict positive class (always beat) with probability = training positive rate
-                beat_prev = train_df["beat"].mean()
-                proba = np.full(len(test_df), beat_prev)
                 auc_roc = 0.5
                 pr_auc = test_df["beat"].mean()
             else:
-                # Standardize macro features if present
                 scaler = SimpleStandardScaler()
                 scale_cols = [c for c in ["sp500_return_pit", "vix_mean_pit"] if c in feats]
                 
@@ -262,15 +261,24 @@ def run_ablation_experiments(folds: list[dict]) -> pd.DataFrame:
             })
 
         score_df = pd.DataFrame(fold_scores).dropna()
+        n_folds = len(score_df)
+        
         mean_roc = score_df["ROC-AUC"].mean()
         std_roc = score_df["ROC-AUC"].std()
         mean_pr = score_df["PR-AUC"].mean()
+
+        # Calculate 95% Confidence Interval for the mean fold ROC-AUC
+        sem_roc = std_roc / np.sqrt(n_folds) if n_folds > 0 else 0.0
+        ci_lower = mean_roc - 1.96 * sem_roc
+        ci_upper = mean_roc + 1.96 * sem_roc
 
         ablation_results.append({
             "Model": name,
             "Mean ROC-AUC": round(mean_roc, 4),
             "Mean PR-AUC": round(mean_pr, 4),
-            "Std ROC-AUC": round(std_roc, 4)
+            "Std ROC-AUC": round(std_roc, 4),
+            "95% CI Lower": round(ci_lower, 4),
+            "95% CI Upper": round(ci_upper, 4)
         })
 
     ablation_df = pd.DataFrame(ablation_results)
@@ -389,13 +397,11 @@ def compute_permutation_importance(models: list[xgb.XGBClassifier], folds: list[
 
         for col in FEATURE_COLS:
             X_test_perm = X_test.copy()
-            # Permute values of the feature
             X_test_perm[col] = np.random.permutation(X_test_perm[col].values)
             
             perm_proba = model.predict_proba(X_test_perm)[:, 1]
             perm_auc = roc_auc_score(y_test, perm_proba)
             
-            # Importance is decrease in AUC
             importances[col].append(base_auc - perm_auc)
 
     # Compile summary
@@ -419,7 +425,7 @@ def compute_permutation_importance(models: list[xgb.XGBClassifier], folds: list[
     return merged_imp
 
 
-def compute_category_auc_with_clustered_bootstrap(pooled_test_df: pd.DataFrame) -> None:
+def compute_category_auc_with_clustered_bootstrap(pooled_test_df: pd.DataFrame) -> pd.DataFrame:
     """Calculate category-level AUC and 95% clustered bootstrap confidence intervals."""
     log.info("Calculating category-level AUCs with clustered bootstrap CIs...")
 
@@ -431,6 +437,14 @@ def compute_category_auc_with_clustered_bootstrap(pooled_test_df: pd.DataFrame) 
         
         if n < 30 or cat_df["beat"].nunique() < 2:
             log.info(f"  {cat:<30}  AUC=insufficient sample (N={n})")
+            results.append({
+                "category": cat,
+                "n": n,
+                "beat_rate": round(cat_df["beat"].mean(), 4) if n > 0 else 0.0,
+                "auc": None,
+                "lower_95": None,
+                "upper_95": None
+            })
             continue
 
         actual_auc = roc_auc_score(cat_df["beat"], cat_df["beat_proba"])
@@ -467,6 +481,8 @@ def compute_category_auc_with_clustered_bootstrap(pooled_test_df: pd.DataFrame) 
             "upper_95": round(upper_ci, 4) if not np.isnan(upper_ci) else None
         })
 
+    return pd.DataFrame(results)
+
 
 def main() -> None:
     log.info("=" * 60)
@@ -480,12 +496,14 @@ def main() -> None:
     folds = get_walk_forward_folds(df)
     log.info(f"Generated {len(folds)} walk-forward folds.")
 
-    # 3. Generate and save Temporal Audit Report
+    # 3. Generate and save Temporal Audit Report (with actual PIT macro audit inspection)
     estimate_panel = pd.read_parquet(ESTIMATE_PATH)
-    # prediction_cutoff is added to estimate_panel in clean.py
-    generate_temporal_audit_report(estimate_panel, None, folds, str(OUT_AUDIT))
+    macro_audit = None
+    if MACRO_AUDIT_PATH.exists():
+        macro_audit = pd.read_parquet(MACRO_AUDIT_PATH)
+    generate_temporal_audit_report(estimate_panel, macro_audit, folds, str(OUT_AUDIT))
 
-    # 4. Run Ablation Experiments
+    # 4. Run Ablation Experiments (includes 95% CI of fold scores)
     ablation_df = run_ablation_experiments(folds)
     ablation_df.to_csv(OUT_ABLATION, index=False)
     log.info(f"Written: {OUT_ABLATION}")
@@ -493,14 +511,15 @@ def main() -> None:
     # 5. Train & Evaluate Full model
     pooled_test_df, models, report_df = train_and_eval_full_model(folds)
 
-    # 6. Compute Clustered Bootstrap CIs for Categories
-    compute_category_auc_with_clustered_bootstrap(pooled_test_df)
+    # 6. Compute and Save Clustered Bootstrap CIs for Categories
+    cat_auc_df = compute_category_auc_with_clustered_bootstrap(pooled_test_df)
+    cat_auc_df.to_csv(OUT_CAT_AUC, index=False)
+    log.info(f"Written: {OUT_CAT_AUC}")
 
     # 7. Compute Permutation Feature Importance
     imp_df = compute_permutation_importance(models, folds)
     
     # Save outputs
-    # Save the final fold model as primary model
     models[-1].save_model(str(OUT_MODEL))
     log.info(f"Written: {OUT_MODEL}")
 

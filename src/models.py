@@ -21,9 +21,14 @@ Model A:
     sigma ~ HalfNormal(0.3)
     y[i]  ~ StudentT(nu, mu[i], sigma)
 
+Model B (Robustness Time-Effect Model):
+    Same as Model A but replaces continuous macro variables with explicit quarter/time random intercepts:
+    mu[i] = mu_global + alpha_ticker[ticker_idx[i]] + alpha_quarter[quarter_idx[i]]
+
 Outputs:
-    - models/trace.nc & models/summary.csv (Raw forecast error)
-    - models/trace_normalized.nc & models/summary_normalized.csv (Scale-normalized error robustness)
+    - models/trace.nc & models/summary.csv (Raw forecast error - Model A)
+    - models/trace_normalized.nc & models/summary_normalized.csv (Scale-normalized error - Model A)
+    - models/trace_time_effect.nc & models/summary_time_effect.csv (Time-effect model - Model B)
     - logs/models.log
 """
 
@@ -50,6 +55,9 @@ SUMMARY_PATH  = MODELS_DIR / "summary.csv"
 
 TRACE_NORM_PATH   = MODELS_DIR / "trace_normalized.nc"
 SUMMARY_NORM_PATH = MODELS_DIR / "summary_normalized.csv"
+
+TRACE_TIME_PATH   = MODELS_DIR / "trace_time_effect.nc"
+SUMMARY_TIME_PATH = MODELS_DIR / "summary_time_effect.csv"
 
 MODELS_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
@@ -109,12 +117,18 @@ def load_and_prepare(panel_path: Path, features_path: Path) -> pd.DataFrame:
     ticker_to_idx = {t: i for i, t in enumerate(tickers_unique)}
     df["ticker_idx"] = df["act_symbol"].map(ticker_to_idx)
 
+    # Create mapping from quarter key to index
+    df["quarter_key"] = df["year"].astype(str) + "Q" + df["fiscal_quarter"].astype(str)
+    quarters_unique = df["quarter_key"].unique()
+    quarter_to_idx = {q: i for i, q in enumerate(quarters_unique)}
+    df["quarter_idx"] = df["quarter_key"].map(quarter_to_idx)
+
     return df
 
 
 def build_model(df: pd.DataFrame, target_col: str) -> pm.Model:
     """
-    Build the hierarchical Bayesian panel model with nested ticker-level effects.
+    Build the hierarchical Bayesian panel model with nested ticker-level effects (Model A).
     Uses non-centered parameterization for stable convergence.
     """
     n_categories = len(CATEGORY_ORDER)
@@ -135,7 +149,7 @@ def build_model(df: pd.DataFrame, target_col: str) -> pm.Model:
     # Map each unique ticker to its corresponding category index
     ticker_cat_idx = df.drop_duplicates("ticker_idx").sort_values("ticker_idx")["category_idx"].values
 
-    log.info(f"Building hierarchical model for target '{target_col}'...")
+    log.info(f"Building hierarchical Model A (Macro) for target '{target_col}'...")
     log.info(f"  n_categories={n_categories}  n_tickers={n_tickers}  n_obs={len(y)}")
 
     with pm.Model() as model:
@@ -187,6 +201,81 @@ def build_model(df: pd.DataFrame, target_col: str) -> pm.Model:
     return model
 
 
+def build_time_effect_model(df: pd.DataFrame, target_col: str) -> pm.Model:
+    """
+    Build the hierarchical Bayesian robustness model with explicit quarter/time effects (Model B).
+    Uses non-centered parameterization for stable convergence.
+    """
+    n_categories = len(CATEGORY_ORDER)
+    n_tickers = len(df["ticker_idx"].unique())
+    n_quarters = len(df["quarter_idx"].unique())
+
+    ticker_idx = df["ticker_idx"].values
+    quarter_idx = df["quarter_idx"].values
+    
+    y = df[target_col].values.astype(float)
+    valid_mask = ~np.isnan(y)
+    y = y[valid_mask]
+    ticker_idx = ticker_idx[valid_mask]
+    quarter_idx = quarter_idx[valid_mask]
+
+    ticker_cat_idx = df.drop_duplicates("ticker_idx").sort_values("ticker_idx")["category_idx"].values
+
+    log.info(f"Building hierarchical Model B (Time-Effect) for target '{target_col}'...")
+    log.info(f"  n_categories={n_categories}  n_tickers={n_tickers}  n_quarters={n_quarters}  n_obs={len(y)}")
+
+    with pm.Model() as model:
+        # Global intercept
+        mu_global      = pm.Normal("mu_global", mu=0.0, sigma=0.5)
+        
+        # Category-level hyperpriors
+        sigma_category = pm.HalfNormal("sigma_category", sigma=0.3)
+        alpha_category = pm.Normal(
+            "alpha_category",
+            mu=0.0,
+            sigma=sigma_category,
+            shape=n_categories,
+        )
+
+        # Ticker-level partial pooling (Non-centered parameterization)
+        sigma_ticker   = pm.HalfNormal("sigma_ticker", sigma=0.3)
+        alpha_ticker_offset = pm.Normal("alpha_ticker_offset", mu=0.0, sigma=1.0, shape=n_tickers)
+        alpha_ticker   = pm.Deterministic(
+            "alpha_ticker",
+            alpha_category[ticker_cat_idx] + alpha_ticker_offset * sigma_ticker
+        )
+
+        # Quarter-level time effects (Non-centered parameterization)
+        sigma_quarter = pm.HalfNormal("sigma_quarter", sigma=0.3)
+        alpha_quarter_offset = pm.Normal("alpha_quarter_offset", mu=0.0, sigma=1.0, shape=n_quarters)
+        alpha_quarter = pm.Deterministic(
+            "alpha_quarter",
+            alpha_quarter_offset * sigma_quarter
+        )
+
+        # Linear predictor (No macro variables)
+        mu = (
+            mu_global
+            + alpha_ticker[ticker_idx]
+            + alpha_quarter[quarter_idx]
+        )
+
+        # Student-t likelihood to handle heavy tails robustly
+        nu    = pm.Gamma("nu", alpha=2, beta=0.1)
+        sigma = pm.HalfNormal("sigma", sigma=0.3)
+
+        pm.StudentT(
+            "y",
+            nu=nu,
+            mu=mu,
+            sigma=sigma,
+            observed=y,
+        )
+
+    log.info("  Model B built successfully.")
+    return model
+
+
 def sample_model(
     model: pm.Model,
     draws: int = 2000,
@@ -221,11 +310,14 @@ def check_convergence(trace: az.InferenceData) -> bool:
     """Check convergence diagnostics: R-hat, ESS, and divergences."""
     log.info("Checking convergence diagnostics...")
 
+    available_vars = list(trace.posterior.data_vars.keys())
+    vars_to_check = ["mu_global", "sigma_category", "sigma_ticker", "nu", "sigma"]
+    for v in ["sigma_quarter", "beta_sp500", "beta_vix"]:
+        if v in available_vars:
+            vars_to_check.append(v)
+
     # Calculate summary stats for main parameters
-    summary = az.summary(trace, var_names=[
-        "mu_global", "sigma_category", "sigma_ticker",
-        "alpha_category", "beta_sp500", "beta_vix", "nu", "sigma"
-    ])
+    summary = az.summary(trace, var_names=vars_to_check)
 
     max_rhat = summary["r_hat"].max()
     min_ess  = summary["ess_bulk"].min()
@@ -260,37 +352,39 @@ def extract_results(trace: az.InferenceData, target_name: str) -> pd.DataFrame:
     log.info(f"Extracting posterior summaries for {target_name}...")
 
     records = []
+    available_vars = list(trace.posterior.data_vars.keys())
 
-    # Global and hyper parameters
-    vars_to_extract = ["mu_global", "sigma_category", "sigma_ticker", "beta_sp500", "beta_vix", "nu", "sigma"]
+    vars_to_extract = ["mu_global", "sigma_category", "sigma_ticker", "sigma_quarter", "beta_sp500", "beta_vix", "nu", "sigma"]
     for var in vars_to_extract:
-        s = az.summary(trace, var_names=[var])
-        row = s.iloc[0]
-        records.append({
-            "parameter": var,
-            "type": "global_or_hyper",
-            "category": None,
-            "mean": row["mean"],
-            "sd": row["sd"],
-            "hdi_3%": row["hdi_3%"],
-            "hdi_97%": row["hdi_97%"],
-            "r_hat": row["r_hat"],
-        })
+        if var in available_vars:
+            s = az.summary(trace, var_names=[var])
+            row = s.iloc[0]
+            records.append({
+                "parameter": var,
+                "type": "global_or_hyper",
+                "category": None,
+                "mean": row["mean"],
+                "sd": row["sd"],
+                "hdi_3%": row["hdi_3%"],
+                "hdi_97%": row["hdi_97%"],
+                "r_hat": row["r_hat"],
+            })
 
     # alpha_category
-    alpha_summary = az.summary(trace, var_names=["alpha_category"])
-    for i, cat in enumerate(CATEGORY_ORDER):
-        row = alpha_summary.iloc[i]
-        records.append({
-            "parameter": f"alpha_category[{cat}]",
-            "type": "category_effect",
-            "category": cat,
-            "mean": row["mean"],
-            "sd": row["sd"],
-            "hdi_3%": row["hdi_3%"],
-            "hdi_97%": row["hdi_97%"],
-            "r_hat": row["r_hat"],
-        })
+    if "alpha_category" in available_vars:
+        alpha_summary = az.summary(trace, var_names=["alpha_category"])
+        for i, cat in enumerate(CATEGORY_ORDER):
+            row = alpha_summary.iloc[i]
+            records.append({
+                "parameter": f"alpha_category[{cat}]",
+                "type": "category_effect",
+                "category": cat,
+                "mean": row["mean"],
+                "sd": row["sd"],
+                "hdi_3%": row["hdi_3%"],
+                "hdi_97%": row["hdi_97%"],
+                "r_hat": row["r_hat"],
+            })
 
     results_df = pd.DataFrame(records)
 
@@ -309,8 +403,8 @@ def main() -> None:
 
     df = load_and_prepare(PANEL_PATH, FEATURES_PATH)
 
-    # 1. Main model: Raw forecast error
-    log.info("--- Model 1: Raw Forecast Error ---")
+    # 1. Main model: Raw forecast error (Model A)
+    log.info("--- Model 1: Raw Forecast Error (Model A - Macro) ---")
     model_raw = build_model(df, "forecast_error_winsorized")
     trace_raw = sample_model(model_raw)
     check_convergence(trace_raw)
@@ -322,8 +416,8 @@ def main() -> None:
     results_raw.to_csv(SUMMARY_PATH, index=False)
     log.info(f"Written summary: {SUMMARY_PATH}")
 
-    # 2. Robustness model: Normalized error
-    log.info("--- Model 2: Scale-Normalized Robustness Error ---")
+    # 2. Robustness model: Normalized error (Model A)
+    log.info("--- Model 2: Scale-Normalized Robustness Error (Model A - Macro) ---")
     model_norm = build_model(df, "normalized_error_winsorized")
     trace_norm = sample_model(model_norm)
     check_convergence(trace_norm)
@@ -334,6 +428,19 @@ def main() -> None:
     log.info(f"Written trace: {TRACE_NORM_PATH}")
     results_norm.to_csv(SUMMARY_NORM_PATH, index=False)
     log.info(f"Written summary: {SUMMARY_NORM_PATH}")
+
+    # 3. Robustness model: Time-Effect model (Model B - Quarter intercepts)
+    log.info("--- Model 3: Time-Effect Robustness Model (Model B - Quarter intercepts) ---")
+    model_time = build_time_effect_model(df, "forecast_error_winsorized")
+    trace_time = sample_model(model_time)
+    check_convergence(trace_time)
+    results_time = extract_results(trace_time, "Time-Effect Robustness Model")
+
+    # Save Model 3 outputs
+    trace_time.to_netcdf(str(TRACE_TIME_PATH))
+    log.info(f"Written trace: {TRACE_TIME_PATH}")
+    results_time.to_csv(SUMMARY_TIME_PATH, index=False)
+    log.info(f"Written summary: {SUMMARY_TIME_PATH}")
 
     log.info("=" * 60)
     log.info(f"models.py complete at {datetime.now().isoformat()}")

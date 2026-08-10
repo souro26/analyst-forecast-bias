@@ -30,6 +30,7 @@ stages:
     outs:
       - data/processed/macro.parquet
       - data/processed/panel_macro.parquet
+      - data/processed/macro_audit.parquet
 
   regime:
     cmd: python src/regime.py
@@ -61,6 +62,8 @@ stages:
       - models/summary.csv
       - models/trace_normalized.nc
       - models/summary_normalized.csv
+      - models/trace_time_effect.nc
+      - models/summary_time_effect.csv
 
   signals:
     cmd: python src/signals.py
@@ -74,4 +77,5 @@ stages:
       - models/xgb_results.csv
       - models/xgb_feature_importance.csv
       - models/xgb_ablation_results.csv
+      - models/xgb_category_auc.csv
       - reports/temporal_audit.json

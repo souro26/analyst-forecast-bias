@@ -6,7 +6,8 @@ import numpy as np
 from src.validation import (
     validate_prediction_cutoff,
     validate_point_in_time_features,
-    validate_train_test_temporal_order
+    validate_train_test_temporal_order,
+    generate_temporal_audit_report
 )
 
 def test_validate_prediction_cutoff_valid():
@@ -83,3 +84,43 @@ def test_validate_train_test_temporal_order_violation():
     test = pd.DataFrame({"prediction_cutoff": pd.to_datetime(["2020-06-30"])})
     with pytest.raises(ValueError, match="Temporal order violated"):
         validate_train_test_temporal_order(train, val, test)
+
+
+def test_generate_temporal_audit_report(tmp_path):
+    # Mock estimate_df
+    estimate = pd.DataFrame({
+        "act_symbol": ["AAPL", "AAPL"],
+        "period_end_date": pd.to_datetime(["2020-03-31", "2020-03-31"]),
+        "prediction_cutoff": pd.to_datetime(["2020-03-31", "2020-03-31"]),
+        "date": pd.to_datetime(["2020-03-10", "2020-03-20"])
+    })
+    
+    # Mock macro_audit_df containing a violation in the second row
+    macro_audit = pd.DataFrame({
+        "prediction_cutoff": pd.to_datetime(["2020-03-31", "2020-03-31"]),
+        "latest_gspc_date": pd.to_datetime(["2020-03-29", "2020-04-01"]),  # row 2 has violation
+        "latest_vix_date": pd.to_datetime(["2020-03-29", "2020-03-29"])
+    })
+
+    # Folds
+    folds = [
+        {
+            "train": pd.DataFrame({"prediction_cutoff": pd.to_datetime(["2019-12-31"])}),
+            "val": pd.DataFrame({"prediction_cutoff": pd.to_datetime(["2020-03-31"])}),
+            "test": pd.DataFrame({"prediction_cutoff": pd.to_datetime(["2020-06-30"])})
+        }
+    ]
+
+    out_file = tmp_path / "temporal_audit.json"
+    generate_temporal_audit_report(estimate, macro_audit, folds, str(out_file))
+
+    # Read and assert
+    import json
+    with open(out_file) as f:
+        report = json.load(f)
+    
+    assert report["total_prediction_events"] == 1
+    assert report["future_feature_observations"] == 0
+    assert report["future_macro_observations"] == 1  # 1 violation counted
+    assert report["cutoff_equal_feature_observations"] == 0
+    assert report["train_test_temporal_violations"] == 0

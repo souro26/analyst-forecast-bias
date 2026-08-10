@@ -126,7 +126,7 @@ def validate_train_test_temporal_order(
 
 def generate_temporal_audit_report(
     estimate_df: pd.DataFrame,
-    macro_df: pd.DataFrame,
+    macro_audit_df: pd.DataFrame,
     folds: list[dict],
     out_path: str
 ) -> None:
@@ -144,12 +144,16 @@ def generate_temporal_audit_report(
     events_with_missing_cutoff = int(estimate_df["prediction_cutoff"].isnull().sum())
     
     # Check macro PIT observations leakage
-    # In macro_df, each row has a timestamp and we check if it respects prediction_cutoff
     future_macro_obs = 0
-    if macro_df is not None and not macro_df.empty and "date" in macro_df.columns and "prediction_cutoff" in macro_df.columns:
-        macro_dates = pd.to_datetime(macro_df["date"])
-        macro_cutoffs = pd.to_datetime(macro_df["prediction_cutoff"])
-        future_macro_obs = int((macro_dates >= macro_cutoffs).sum())
+    if macro_audit_df is not None and not macro_audit_df.empty:
+        gspc_dates = pd.to_datetime(macro_audit_df["latest_gspc_date"])
+        vix_dates = pd.to_datetime(macro_audit_df["latest_vix_date"])
+        cutoffs = pd.to_datetime(macro_audit_df["prediction_cutoff"])
+        
+        gspc_violations = (gspc_dates >= cutoffs)
+        vix_violations = (vix_dates >= cutoffs)
+        
+        future_macro_obs = int((gspc_violations | vix_violations).sum())
 
     # Check walk-forward folds order violations
     train_test_temporal_violations = 0

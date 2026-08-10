@@ -103,7 +103,6 @@ def compute_features(group: pd.DataFrame, cutoff: pd.Timestamp) -> dict:
         direction_changes = np.nan
 
     # 4. Final vs Initial (8-week comparison within 16-week window)
-    # final_consensus is latest snapshot strictly before cutoff (the last element in sorted group)
     final_consensus = consensus[-1]
     
     # initial reference: latest snapshot on or before prediction_cutoff - 56 days
@@ -154,33 +153,42 @@ def build_features(estimate: pd.DataFrame) -> pd.DataFrame:
     cq["prediction_cutoff"] = pd.to_datetime(cq["prediction_cutoff"])
     cq["period_end_date"] = pd.to_datetime(cq["period_end_date"])
 
-    # Basic Point-In-Time Validation check on input snapshots
-    validate_point_in_time_features(cq, "date", "prediction_cutoff")
+    # 1. 16-week window filtering: cutoff - 112 days <= snapshot_date < cutoff
+    start_dates = cq["prediction_cutoff"] - pd.Timedelta(days=112)
+    cq_filtered = cq[(cq["date"] >= start_dates) & (cq["date"] < cq["prediction_cutoff"])].copy()
+    log.info(f"  Snapshots within 16-week pre-cutoff window: {len(cq_filtered):,} rows")
+
+    # 2. PIT Validation check AFTER the 16-week filtering
+    validate_point_in_time_features(cq_filtered, "date", "prediction_cutoff")
 
     records = []
-    groups = cq.groupby(["act_symbol", "period_end_date"])
+    groups = cq_filtered.groupby(["act_symbol", "period_end_date"])
     log.info(f"  Unique ticker-quarters to process: {groups.ngroups:,}")
 
     for (ticker, period_end), group in groups:
         cutoff = pd.to_datetime(period_end)
-        start_date = cutoff - pd.Timedelta(days=112) # 16 weeks = 112 days
-        
-        # Restrict window: prediction_cutoff - 112 days <= snapshot_date < prediction_cutoff
-        group_filtered = group[(group["date"] >= start_date) & (group["date"] < cutoff)].copy()
-        
-        feats = compute_features(group_filtered, cutoff)
+        feats = compute_features(group, cutoff)
         feats["act_symbol"] = ticker
         feats["period_end_date"] = period_end
         records.append(feats)
 
     features_df = pd.DataFrame(records)
-    features_df = features_df[[
-        "act_symbol", "period_end_date",
-        "revision_slope", "revision_acceleration",
-        "direction_changes", "final_vs_initial",
-        "spread_trend", "analyst_count_trend",
-        "weeks_of_data"
-    ]]
+    if features_df.empty:
+        features_df = pd.DataFrame(columns=[
+            "act_symbol", "period_end_date",
+            "revision_slope", "revision_acceleration",
+            "direction_changes", "final_vs_initial",
+            "spread_trend", "analyst_count_trend",
+            "weeks_of_data"
+        ])
+    else:
+        features_df = features_df[[
+            "act_symbol", "period_end_date",
+            "revision_slope", "revision_acceleration",
+            "direction_changes", "final_vs_initial",
+            "spread_trend", "analyst_count_trend",
+            "weeks_of_data"
+        ]]
  
     log.info(f"  Features shape: {features_df.shape}")
     return features_df
