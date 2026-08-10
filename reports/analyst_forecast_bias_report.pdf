@@ -1,0 +1,275 @@
+%PDF-1.4
+%âãÏÓ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R 10 0 R 12 0 R 14 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2095 >>
+stream
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 285 28 Td (Page 1 of 5) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 40 m 558 40 l S
+0.122 0.220 0.392 rg
+BT /F2 24 Tf 54 730 Td (Analyst Forecast Bias) Tj ET
+0.180 0.455 0.710 rg
+BT /F1 13 Tf 54 698 Td (Structure, Regime Sensitivity, and Predictive Signals) Tj ET
+0.2 0.2 0.2 rg
+BT /F2 9.5 Tf 54 676 Td (Souradeep Roy) Tj /F1 9.5 Tf (   |   github.com/souro26/analyst-forecast-bias) Tj ET
+0.35 0.35 0.35 rg
+BT /F1 9 Tf 54 661 Td (Stack: Python  |  PyMC 5.28  |  ArViZ 0.23  |  XGBoost 3.2  |  hmmlearn  |  pandas  |  yfinance  |  matplotlib) Tj ET
+0.180 0.455 0.710 RG 1.5 w 54 645 m 558 645 l S
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 627.0 Td (Wall Street analysts are systematically wrong about earnings. They underestimate more often than) Tj ET
+BT /F1 9.5 Tf 54 613.5 Td (they overestimate, and they underestimate by different amounts for different types of companies. This) Tj ET
+BT /F1 9.5 Tf 54 600.0 Td (project asks three questions about that bias: does it vary by the type of company being forecast, does) Tj ET
+BT /F1 9.5 Tf 54 586.5 Td (the macro environment change how large it is, and can the pattern of analyst revisions in the weeks) Tj ET
+BT /F1 9.5 Tf 54 573.0 Td (before an announcement predict whether a beat or miss is coming?) Tj ET
+0.122 0.220 0.392 rg
+BT /F2 14 Tf 54 544.0 Td (Data) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 524.0 Td (The primary dataset is a panel of quarterly EPS actuals and consensus estimates for 72 large-cap US) Tj ET
+BT /F1 9.5 Tf 54 510.5 Td (companies from Q4 2017 through Q2 2026. After cleaning and winsorizing forecast errors at the 2.5th and) Tj ET
+BT /F1 9.5 Tf 54 497.0 Td (97.5th percentiles within each category, the panel contains 2,455 company-quarter observations,) Tj ET
+BT /F1 9.5 Tf 54 483.5 Td (balanced across categories at roughly 406 to 415 rows each.) Tj ET
+BT /F1 9.5 Tf 54 465.0 Td (A second dataset of 63,744 weekly consensus snapshots captures how analyst estimates evolve in) Tj ET
+BT /F1 9.5 Tf 54 451.5 Td (the 16 weeks before each announcement. This is the raw material for the revision path features.) Tj ET
+BT /F1 9.5 Tf 54 433.0 Td (Macro data - quarterly S&P 500 returns and quarterly average VIX - is downloaded via yfinance and) Tj ET
+BT /F1 9.5 Tf 54 419.5 Td (merged onto each company-quarter by date. Both are standardized to z-scores before entering the) Tj ET
+BT /F1 9.5 Tf 54 406.0 Td (model so their coefficients are directly comparable.) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2673 >>
+stream
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 410 750 Td (Analyst Forecast Bias  |  Souradeep Roy) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 743 m 558 743 l S
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 285 28 Td (Page 2 of 5) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 40 m 558 40 l S
+0.180 0.455 0.710 rg
+BT /F2 11 Tf 54 726.0 Td (Category Definitions) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 710.0 Td (Companies are grouped into six earnings-driver categories. Defensive baseline \(12 tickers: JNJ,) Tj ET
+BT /F1 9.5 Tf 54 696.5 Td (PG, KO and similar\) serves as the control group - stable, predictable earnings, deep analyst) Tj ET
+BT /F1 9.5 Tf 54 683.0 Td (coverage. The five other categories are:) Tj ET
+BT /F2 9.5 Tf 68 664.5 Td (• ) Tj /F1 9.5 Tf (Commodity driven \(XOM, CVX, FCX and similar\) - earnings tied to commodity prices) Tj ET
+BT /F2 9.5 Tf 68 649.0 Td (• ) Tj /F1 9.5 Tf (Macro rate sensitive \(JPM, GS, BAC and similar\) - driven by interest rate spreads and credit) Tj ET
+BT /F1 9.5 Tf 78 635.5 Td (conditions) Tj ET
+BT /F2 9.5 Tf 68 620.0 Td (• ) Tj /F1 9.5 Tf (Tech cycle \(NVDA, AAPL, ASML and similar\) - driven by semiconductor and product cycles) Tj ET
+BT /F2 9.5 Tf 68 604.5 Td (• ) Tj /F1 9.5 Tf (Economically cyclical \(CAT, F, AMZN and similar\) - tracks the broader economic cycle) Tj ET
+BT /F2 9.5 Tf 68 589.0 Td (• ) Tj /F1 9.5 Tf (Regulatory idiosyncratic \(LLY, PFE, NEE and similar\) - earnings shaped by regulatory events) Tj ET
+BT /F1 9.5 Tf 78 575.5 Td (and approvals) Tj ET
+BT /F1 9.5 Tf 54 557.0 Td (If the bias patterns found in the other five categories are real and not artifacts of the data or) Tj ET
+BT /F1 9.5 Tf 54 543.5 Td (methodology, they should not appear in defensive baseline. This is the falsifiability check built into) Tj ET
+BT /F1 9.5 Tf 54 530.0 Td (the design.) Tj ET
+0.122 0.220 0.392 rg
+BT /F2 14 Tf 54 501.0 Td (Methodology) Tj ET
+0.180 0.455 0.710 rg
+BT /F2 11 Tf 54 483.0 Td (Regime Detection) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 467.0 Td (A three-state Gaussian Hidden Markov Model is fitted to monthly S&P 500 returns from January) Tj ET
+BT /F1 9.5 Tf 54 453.5 Td (2016 to May 2026. The model identifies three latent market states - bull, sideways, and bear - by) Tj ET
+BT /F1 9.5 Tf 54 440.0 Td (learning the characteristic return and volatility of each state from the data rather than applying) Tj ET
+BT /F1 9.5 Tf 54 426.5 Td (manual labels.) Tj ET
+BT /F1 9.5 Tf 54 408.0 Td (The model converged cleanly. The three states separate primarily on volatility rather than return) Tj ET
+BT /F1 9.5 Tf 54 394.5 Td (direction. The bear state has a mean monthly return of 0.002 and a standard deviation of 0.075 -) Tj ET
+BT /F1 9.5 Tf 54 381.0 Td (nearly identical in return to the sideways state but dramatically more volatile. This is economically) Tj ET
+BT /F1 9.5 Tf 54 367.5 Td (sensible: the defining feature of a crisis regime is not that returns are negative but that uncertainty) Tj ET
+BT /F1 9.5 Tf 54 354.0 Td (is extreme. March and April 2020 are correctly labelled bear; June 2021 bull; June 2022 bear.) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 3045 >>
+stream
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 410 750 Td (Analyst Forecast Bias  |  Souradeep Roy) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 743 m 558 743 l S
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 285 28 Td (Page 3 of 5) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 40 m 558 40 l S
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 730.0 Td (These regime labels informed the EDA but were ultimately replaced by continuous VIX in the) Tj ET
+BT /F1 9.5 Tf 54 716.5 Td (Bayesian model. With only nine years of data and three to four years per regime, the model could not) Tj ET
+BT /F1 9.5 Tf 54 703.0 Td (estimate separate regime means - the posterior intervals were too wide to be useful. Continuous VIX) Tj ET
+BT /F1 9.5 Tf 54 689.5 Td (gives every observation its own macro context and produces estimable coefficients.) Tj ET
+0.180 0.455 0.710 rg
+BT /F2 11 Tf 54 669.5 Td (Hierarchical Bayesian Model) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 653.5 Td (The core model is a three-level hierarchical Bayesian regression fitted in PyMC. The target is) Tj ET
+BT /F1 9.5 Tf 54 640.0 Td (winsorized forecast error at the company-quarter level. The hierarchy has three levels: a grand) Tj ET
+BT /F1 9.5 Tf 54 626.5 Td (mean shared across all observations, category-level offsets that capture persistent bias by) Tj ET
+BT /F1 9.5 Tf 54 613.0 Td (earnings-driver type, and continuous macro predictors \(z-scored VIX and S&P 500 return\) that capture) Tj ET
+BT /F1 9.5 Tf 54 599.5 Td (how the macro environment modulates bias.) Tj ET
+BT /F1 9.5 Tf 54 581.0 Td (The likelihood is Student-t rather than Normal. QQ plots for all six categories show consistent right) Tj ET
+BT /F1 9.5 Tf 54 567.5 Td (skew and heavy tails, with normality correlations ranging from 0.707 to 0.931. The model confirms) Tj ET
+BT /F1 9.5 Tf 54 554.0 Td (the choice - the posterior for the degrees of freedom parameter nu concentrates tightly around) Tj ET
+BT /F1 9.5 Tf 54 540.5 Td (1.15 \(94% HDI [1.056, 1.232]\), far below the threshold of roughly 30 where Student-t approximates) Tj ET
+BT /F1 9.5 Tf 54 527.0 Td (Normal. Using a Normal likelihood would systematically understate the probability of large earnings) Tj ET
+BT /F1 9.5 Tf 54 513.5 Td (misses.) Tj ET
+BT /F1 9.5 Tf 54 495.0 Td (The model is sampled with four NUTS chains, 1,000 tuning steps, and 2,000 draws per chain.) Tj ET
+BT /F1 9.5 Tf 54 481.5 Td (Convergence is clean: R-hat = 1.000 across all parameters, minimum effective sample size = 1,396,) Tj ET
+BT /F1 9.5 Tf 54 468.0 Td (zero divergences.) Tj ET
+0.180 0.455 0.710 rg
+BT /F2 11 Tf 54 448.0 Td (Revision Path Features) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 432.0 Td (Seven features are constructed from the weekly consensus snapshots for each company-quarter. All) Tj ET
+BT /F1 9.5 Tf 54 418.5 Td (are observable before the earnings announcement and contain no forward-looking information:) Tj ET
+BT /F2 9.5 Tf 68 400.0 Td (• ) Tj /F1 9.5 Tf (Revision slope - linear trend of consensus estimates over the 16-week window) Tj ET
+BT /F2 9.5 Tf 68 384.5 Td (• ) Tj /F1 9.5 Tf (Revision acceleration - whether the revision trend is gaining or losing momentum) Tj ET
+BT /F2 9.5 Tf 68 369.0 Td (• ) Tj /F1 9.5 Tf (Direction changes - how many times consensus reversed direction) Tj ET
+BT /F2 9.5 Tf 68 353.5 Td (• ) Tj /F1 9.5 Tf (Final vs initial - net change in consensus from eight weeks before announcement to the day before) Tj ET
+BT /F2 9.5 Tf 68 338.0 Td (• ) Tj /F1 9.5 Tf (Spread trend - whether analyst disagreement \(high minus low estimate\) is growing or shrinking) Tj ET
+BT /F2 9.5 Tf 68 322.5 Td (• ) Tj /F1 9.5 Tf (Analyst count trend - whether coverage is growing or shrinking into the quarter) Tj ET
+BT /F2 9.5 Tf 68 307.0 Td (• ) Tj /F1 9.5 Tf (Weeks of data - number of weekly snapshots available) Tj ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 3173 >>
+stream
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 410 750 Td (Analyst Forecast Bias  |  Souradeep Roy) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 743 m 558 743 l S
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 285 28 Td (Page 4 of 5) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 40 m 558 40 l S
+0.180 0.455 0.710 rg
+BT /F2 11 Tf 54 726.0 Td (XGBoost Classifier) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 710.0 Td (An XGBoost binary classifier is trained to predict beat or miss from the seven revision path features) Tj ET
+BT /F1 9.5 Tf 54 696.5 Td (plus category \(integer encoded\), z-scored VIX, and z-scored S&P 500 return. The train/test split is) Tj ET
+BT /F1 9.5 Tf 54 683.0 Td (strictly time-based: 2017 to 2022 for training, 2023 to 2025 for testing. A random split is not used) Tj ET
+BT /F1 9.5 Tf 54 669.5 Td (because it would allow future quarters to leak into the training set.) Tj ET
+BT /F1 9.5 Tf 54 651.0 Td (The 82% beat rate creates a class imbalance problem. Accuracy is a useless metric here - a naive) Tj ET
+BT /F1 9.5 Tf 54 637.5 Td (always-beat classifier scores 82%. The model uses scale_pos_weight to upweight misses during) Tj ET
+BT /F1 9.5 Tf 54 624.0 Td (training and is evaluated on AUC-ROC and precision-recall AUC instead.) Tj ET
+0.122 0.220 0.392 rg
+BT /F2 14 Tf 54 595.0 Td (Findings) Tj ET
+0.180 0.455 0.710 rg
+BT /F2 11 Tf 54 577.0 Td (1.  Market uncertainty amplifies analyst error - market direction does not) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 561.0 Td (The VIX coefficient has a posterior mean of 0.006 EPS and a 94% credible interval of [0.001, 0.010] - it) Tj ET
+BT /F1 9.5 Tf 54 547.5 Td (excludes zero. A one-standard-deviation increase in quarterly VIX is associated with a credible) Tj ET
+BT /F1 9.5 Tf 54 534.0 Td (increase in analyst underestimation. The S&P 500 return coefficient has mean 0.004 and interval) Tj ET
+BT /F1 9.5 Tf 54 520.5 Td ([-0.001, 0.008] - it includes zero and shows no credible effect.) Tj ET
+BT /F1 9.5 Tf 54 502.0 Td (Analysts miss more in high-uncertainty quarters, not simply in down quarters. A volatile but flat) Tj ET
+BT /F1 9.5 Tf 54 488.5 Td (quarter is more disruptive to forecasting than a steadily declining one. This is a more precise claim) Tj ET
+BT /F1 9.5 Tf 54 475.0 Td (than the usual narrative that bear markets cause more analyst misses - the data points to uncertainty,) Tj ET
+BT /F1 9.5 Tf 54 461.5 Td (not direction, as the mechanism.) Tj ET
+0.180 0.455 0.710 rg
+BT /F2 11 Tf 54 441.5 Td (2.  Bias varies by earnings-driver category, and the control group holds) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 425.5 Td (Bootstrap confidence intervals on mean forecast error \(10,000 resamples\) show positive bias in every) Tj ET
+BT /F1 9.5 Tf 54 412.0 Td (category, with all intervals excluding zero. The means range from 0.054 EPS for defensive baseline) Tj ET
+BT /F1 9.5 Tf 54 398.5 Td (to 0.249 for macro rate sensitive. Tech companies are consistently underestimated regardless of year.) Tj ET
+BT /F1 9.5 Tf 54 385.0 Td (Defensive companies are underestimated least.) Tj ET
+BT /F1 9.5 Tf 54 366.5 Td (In the Bayesian model, defensive baseline is the only category whose posterior credible interval) Tj ET
+BT /F1 9.5 Tf 54 353.0 Td (excludes zero \(mean -0.034, HDI [-0.061, -0.010]\). The control group holds - stable earnings and deep) Tj ET
+BT /F1 9.5 Tf 54 339.5 Td (analyst coverage produce the lowest and most credible bias estimate in the dataset.) Tj ET
+BT /F1 9.5 Tf 54 321.0 Td (The category by year heatmap surfaces one result worth highlighting separately: economically) Tj ET
+BT /F1 9.5 Tf 54 307.5 Td (cyclical in 2022 shows a mean forecast error of -0.15, the only negative cell in the entire dataset.) Tj ET
+BT /F1 9.5 Tf 54 294.0 Td (Analysts overestimated consumer and industrial earnings in the one year a rapid rate shock hit) Tj ET
+BT /F1 9.5 Tf 54 280.5 Td (spending hard and fast. The sign of the bias flipped - and it flipped for exactly the category you would) Tj ET
+BT /F1 9.5 Tf 54 267.0 Td (expect it to flip for.) Tj ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 15 0 R >>
+endobj
+15 0 obj
+<< /Length 3409 >>
+stream
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 410 750 Td (Analyst Forecast Bias  |  Souradeep Roy) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 743 m 558 743 l S
+0.467 0.467 0.467 rg
+BT /F3 8 Tf 285 28 Td (Page 5 of 5) Tj ET
+0.867 0.867 0.867 RG 0.5 w 54 40 m 558 40 l S
+0.180 0.455 0.710 rg
+BT /F2 11 Tf 54 726.0 Td (3.  Revision path signal is real but category-dependent) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 710.0 Td (The XGBoost classifier achieves AUC-ROC of 0.573 on the held-out 2023-2025 test set against a random) Tj ET
+BT /F1 9.5 Tf 54 696.5 Td (baseline of 0.500. PR-AUC is 0.900 against an always-beat baseline of 0.860. The lift is modest but) Tj ET
+BT /F1 9.5 Tf 54 683.0 Td (consistent across all probability thresholds, and the calibration plot confirms the model's output is) Tj ET
+BT /F1 9.5 Tf 54 669.5 Td (a reliable ordinal ranking - higher predicted beat probability corresponds monotonically to higher) Tj ET
+BT /F1 9.5 Tf 54 656.0 Td (actual beat rate across all bins.) Tj ET
+BT /F1 9.5 Tf 54 637.5 Td (The per-category AUC breakdown is the most practically useful result:) Tj ET
+BT /F2 9.5 Tf 68 619.0 Td (• ) Tj /F1 9.5 Tf (Tech cycle: 0.673 - revision path is genuinely predictive. Analysts revise upward before tech) Tj ET
+BT /F1 9.5 Tf 78 605.5 Td (announcements but systematically undershoot, and this pattern is learnable) Tj ET
+BT /F2 9.5 Tf 68 590.0 Td (• ) Tj /F1 9.5 Tf (Defensive baseline: 0.567  |  Economically cyclical: 0.551  |  Macro rate sensitive: 0.537 - all above) Tj ET
+BT /F1 9.5 Tf 78 576.5 Td (random) Tj ET
+BT /F2 9.5 Tf 68 561.0 Td (• ) Tj /F1 9.5 Tf (Commodity driven: 0.440  |  Regulatory idiosyncratic: 0.453 - both below random) Tj ET
+BT /F1 9.5 Tf 54 542.5 Td (For commodity and regulatory companies the revision path actively misleads. Commodity earnings) Tj ET
+BT /F1 9.5 Tf 54 529.0 Td (are driven by oil and metals prices that move after analysts have submitted their estimates.) Tj ET
+BT /F1 9.5 Tf 54 515.5 Td (Regulatory earnings turn on binary FDA approval decisions. No amount of watching consensus revisions) Tj ET
+BT /F1 9.5 Tf 54 502.0 Td (helps when the outcome-determining event has not yet happened.) Tj ET
+BT /F1 9.5 Tf 54 483.5 Td (Feature importance \(gain-based\): category membership is the single strongest predictor at 14.6% of) Tj ET
+BT /F1 9.5 Tf 54 470.0 Td (total gain. The revision path features collectively contribute 56%, with the net consensus change in the) Tj ET
+BT /F1 9.5 Tf 54 456.5 Td (final eight weeks \(12.2%\) and revision slope \(9.9%\) as the strongest individual contributors. VIX and) Tj ET
+BT /F1 9.5 Tf 54 443.0 Td (S&P 500 return together add 17%. All three layers of the project show up in the feature ranking in) Tj ET
+BT /F1 9.5 Tf 54 429.5 Td (the right order.) Tj ET
+0.122 0.220 0.392 rg
+BT /F2 14 Tf 54 400.5 Td (Limitations) Tj ET
+0.067 0.067 0.067 rg
+BT /F1 9.5 Tf 54 380.5 Td (72 companies over nine years is enough to find patterns but limits precision. The regime effect cannot) Tj ET
+BT /F1 9.5 Tf 54 367.0 Td (be estimated discretely with this sample - replacing bull/bear/sideways labels with continuous VIX was) Tj ET
+BT /F1 9.5 Tf 54 353.5 Td (a direct consequence of having only three to four years per regime. A dataset with 20-plus years and) Tj ET
+BT /F1 9.5 Tf 54 340.0 Td (300-plus companies would allow more granular analysis.) Tj ET
+BT /F1 9.5 Tf 54 321.5 Td (Survivorship bias is present. The 72 companies are current large-cap constituents - chronic missers) Tj ET
+BT /F1 9.5 Tf 54 308.0 Td (that shrank or were acquired over the period are not included, which likely inflates beat rates slightly.) Tj ET
+BT /F1 9.5 Tf 54 294.5 Td (Category assignments are also fixed; in reality a company's earnings drivers shift over time.) Tj ET
+BT /F1 9.5 Tf 54 276.0 Td (The classifier is tested on three years of held-out data, and 2023-2025 has structural features that) Tj ET
+BT /F1 9.5 Tf 54 262.5 Td (differ from the training period - AI-driven tech outperformance, higher rates. The per-category AUC) Tj ET
+BT /F1 9.5 Tf 54 249.0 Td (results should be treated as directional rather than precise estimates.) Tj ET
+0.8 0.8 0.8 RG 0.5 w 54 224.0 m 558 224.0 l S
+0.467 0.467 0.467 rg
+BT /F3 8.5 Tf 175 209.0 Td (Full code, notebooks, and figures at github.com/souro26/analyst-forecast-bias) Tj ET
+endstream
+endobj
+xref
+0 16
+0000000000 65535 f 
+0000000019 00000 n 
+0000000068 00000 n 
+0000000147 00000 n 
+0000000244 00000 n 
+0000000346 00000 n 
+0000000450 00000 n 
+0000000615 00000 n 
+0000002781 00000 n 
+0000002946 00000 n 
+0000005690 00000 n 
+0000005856 00000 n 
+0000008972 00000 n 
+0000009138 00000 n 
+0000012382 00000 n 
+0000012548 00000 n 
+trailer
+<< /Size 16 /Root 1 0 R >>
+startxref
+16028
+%%EOF
