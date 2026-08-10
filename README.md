@@ -25,17 +25,17 @@ Wall Street analysts systematically underestimate earnings — but not uniformly
 
 ## Three Findings
 
-> **1 — Market uncertainty amplifies analyst error; market direction does not**
->
-> The hierarchical Bayesian model (PyMC, NUTS) estimates **β_VIX = 0.006 EPS** with 94% credible interval **[0.001, 0.010] — excludes zero**. The S&P 500 return coefficient is **β_S&P = 0.004**, HDI **[−0.001, 0.008] — includes zero**. A one-SD increase in quarterly VIX is associated with a credible increase in analyst underestimation; the same increase in market return is not. Analysts miss more when uncertainty is high, not simply when the market is down. The overall grand mean underestimation is **μ_global = 0.072 EPS** — about seven cents per share across the full panel.
+**1 - Market uncertainty amplifies analyst error; market direction does not**
 
-> **2 — Bias is structural and category-specific; the falsifiability check holds**
->
-> Bootstrap confidence intervals (10,000 resamples) exclude zero for all six categories. Mean underestimation ranges from **0.054 EPS** (defensive baseline) to **0.249 EPS** (macro rate sensitive). In the Bayesian model, **defensive baseline is the only category whose posterior credible interval excludes zero** (α = −0.034, HDI [−0.061, −0.010]). The control group — selected for stable, predictable earnings and deep analyst coverage — produces the lowest and most credible bias estimate in the dataset. The 2022 economically cyclical cell (**−0.15 EPS**) is the only negative observation in the entire panel: analyst bias reversed sign in the one year a rapid rate shock hit spending fast enough to outpace revisions.
+The hierarchical Bayesian model (PyMC, NUTS) puts **β_VIX = 0.006 EPS** with a 94% credible interval of **[0.001, 0.010]**, which excludes zero. The S&P 500 return coefficient is **β_S&P = 0.004** with HDI **[-0.001, 0.008]**, which includes zero. Analysts miss more in high-uncertainty quarters, not just in down markets. A volatile but flat quarter does more damage to forecast accuracy than a steadily declining one. The grand mean underestimation across the full panel is **μ_global = 0.072 EPS** - roughly seven cents a share.
 
-> **3 — Pre-announcement revision paths contain signal, but it is category-dependent**
->
-> An XGBoost classifier trained on 7 engineered revision-path features achieves **AUC-ROC = 0.573** on the held-out 2023–2025 test set (random baseline = 0.500). Per-category breakdown: **tech cycle = 0.673** (learnable pattern); defensive baseline 0.567; economically cyclical 0.551; macro rate sensitive 0.537; **commodity driven = 0.440, regulatory idiosyncratic = 0.453 — both below random**. Category membership is the single strongest predictor at **14.6% of gain**; revision path features collectively contribute 56%; VIX and S&P 500 return add 17%.
+**2 - Bias is structural and varies by earnings driver; the control group holds**
+
+Bootstrap confidence intervals (10,000 resamples) exclude zero for all six categories. Mean underestimation runs from **0.054 EPS** (defensive baseline) up to **0.249 EPS** (macro rate sensitive). In the Bayesian model, **defensive baseline is the only category whose posterior credible interval excludes zero** (α = -0.034, HDI [-0.061, -0.010]). That is the control group - 12 companies with stable, predictable earnings and deep analyst coverage. It produces the smallest and most credible bias in the dataset, which is what you would expect if the patterns in the other categories are real. The one exception in the data is 2022 economically cyclical (**-0.15 EPS**), the only negative cell in nine years. Bias flipped sign in the one year a rate shock hit consumer and industrial spending faster than estimates could track it.
+
+**3 - Revision paths contain signal, but it depends on the category**
+
+An XGBoost classifier on 7 pre-announcement revision path features reaches **AUC-ROC = 0.573** on the held-out 2023-2025 test set (random baseline = 0.500). Per category: **tech cycle = 0.673**; defensive baseline 0.567; economically cyclical 0.551; macro rate sensitive 0.537; **commodity driven = 0.440 and regulatory idiosyncratic = 0.453, both below random**. For commodity and regulatory companies, the revision path actively misleads - their outcomes turn on price moves and FDA decisions that happen after analysts have already filed their numbers. Category membership is the single strongest feature at **14.6% of gain**. Revision path features collectively contribute 56%, VIX and S&P 500 return add 17%.
 
 ---
 
@@ -53,9 +53,9 @@ Wall Street analysts systematically underestimate earnings — but not uniformly
 
 ## Key Figures
 
-### Category × Year Heatmap — the 2022 anomaly
+### Category x Year Heatmap - the 2022 anomaly
 
-The only negative cell in a nine-year panel is economically cyclical in 2022. Every other cell is positive — analysts underestimate. This one they overestimated, in the one year a rapid rate shock hit consumer and industrial spending before estimates could catch up.
+Every cell in this panel is positive except one: economically cyclical in 2022. That is the only year analysts overestimated for that group, and it happened to be the year a rapid rate hike hit consumer and industrial spending before estimates had a chance to adjust.
 
 <p align="center">
   <img src="reports/figures/02_category_year_heatmap.png" width="760" alt="Mean forecast error by category and year (2017–2025)">
@@ -63,9 +63,9 @@ The only negative cell in a nine-year panel is economically cyclical in 2022. Ev
 
 ---
 
-### Finding 1 — VIX credibly amplifies error; S&P 500 does not
+### Finding 1 - VIX credibly amplifies error; S&P 500 does not
 
-Posterior distributions for the two macro coefficients. The VIX posterior (orange) sits entirely to the right of zero. The S&P 500 return posterior (blue) straddles zero. This asymmetry is the core Finding 1 result.
+Posterior distributions for both macro coefficients. The VIX posterior (orange) sits fully to the right of zero. The S&P 500 return posterior (blue) straddles it. That asymmetry is the main result of Finding 1.
 
 <p align="center">
   <img src="reports/figures/03_macro_posteriors.png" width="760" alt="Posterior distributions for VIX and S&P 500 macro coefficients">
@@ -73,9 +73,9 @@ Posterior distributions for the two macro coefficients. The VIX posterior (orang
 
 ---
 
-### Finding 2 — Systematic underestimation across all categories
+### Finding 2 - Systematic underestimation across all categories
 
-Bootstrap 95% confidence intervals on mean forecast error. All bars exclude zero; defensive baseline (the control group) is the smallest. Macro rate sensitive companies are the largest — financials' earnings are highly sensitive to the rate environment, which is itself hard to forecast.
+Bootstrap 95% CIs on mean forecast error. Every bar excludes zero. Defensive baseline, the control group, is the smallest. Macro rate sensitive is the largest - financials' earnings move with the rate environment, which is itself hard to predict.
 
 <p align="center">
   <img src="reports/figures/02_bootstrap_bias_by_category.png" width="760" alt="Systematic analyst underestimation by category (2017–2026)">
@@ -83,9 +83,9 @@ Bootstrap 95% confidence intervals on mean forecast error. All bars exclude zero
 
 ---
 
-### Finding 3 — Revision path predictive power by category
+### Finding 3 - Revision path predictive power by category
 
-Tech cycle companies reach AUC = 0.673 — their revision pattern is systematically biased and that bias is learnable. Commodity and regulatory companies fall below random: their outcomes are determined by events (commodity price moves, FDA decisions) that occur after analysts have already committed their estimates.
+Tech cycle companies reach AUC = 0.673. Their revision pattern is biased in a consistent direction and the model picks that up. Commodity and regulatory companies fall below random because their outcomes depend on events - price moves, approval decisions - that happen after the estimates are already in.
 
 <p align="center">
   <img src="reports/figures/04_category_auc.png" width="760" alt="AUC-ROC of XGBoost classifier by earnings-driver category">
@@ -93,9 +93,9 @@ Tech cycle companies reach AUC = 0.673 — their revision pattern is systematica
 
 ---
 
-### Feature importance — all three layers show up
+### Feature importance - all three layers show up
 
-Category membership ranks first (14.6%), but 7 revision-path features fill the next 8 slots collectively at 56%. VIX and S&P 500 return add 17%. The feature ranking confirms that all three components of the project — structural category effects, revision dynamics, and macro context — carry independent predictive information.
+Category membership ranks first at 14.6%, but the 7 revision path features fill the next 8 slots and collectively account for 56%. VIX and S&P 500 return add another 17%. All three parts of the project - category effects, revision dynamics, and macro context - show up in the ranking independently.
 
 <p align="center">
   <img src="reports/figures/04_feature_importance.png" width="720" alt="XGBoost feature importance (gain-based)">
@@ -107,13 +107,13 @@ Category membership ranks first (14.6%), but 7 revision-path features fill the n
 
 Three models in sequence, each answering a different question:
 
-**Hidden Markov Model (regime detection):** A three-state Gaussian HMM fitted to monthly S&P 500 returns (2016–2026, `hmmlearn`) labels each month as bull, sideways, or bear based on latent return-and-volatility structure. The bear state is defined by extreme volatility (σ = 0.075/month), not negative returns — March 2020, June 2022, and the 2018 Q4 drawdown all correctly classify as bear. These labels informed the EDA but were replaced by continuous VIX in the Bayesian model: with only nine years of data, three discrete regime levels leave too few observations per regime to estimate credible effects.
+**Hidden Markov Model (regime detection):** A three-state Gaussian HMM fitted to monthly S&P 500 returns from 2016 to 2026 (`hmmlearn`) labels each month as bull, sideways, or bear. The bear state is characterized by high volatility (σ = 0.075/month), not negative returns - March 2020, June 2022, and Q4 2018 all label correctly. These regime labels informed the EDA but were replaced by continuous VIX in the Bayesian model. With only nine years of data there are three to four years per regime at most, which is not enough to estimate separate effects credibly.
 
-**Hierarchical Bayesian model (bias structure):** Three-level hierarchy — grand mean → category offsets → continuous macro predictors — fitted in PyMC with NUTS sampling (4 chains × 2,000 draws, R̂ = 1.000 everywhere, min ESS = 1,396, zero divergences). Likelihood is Student-t, justified by EDA: QQ normality correlations range from 0.707 to 0.931 across all six categories, and the posterior for the degrees-of-freedom parameter concentrates tightly at ν ≈ 1.15 — extreme heavy tails.
+**Hierarchical Bayesian model (bias structure):** Three levels - grand mean, category offsets, continuous macro predictors - fitted in PyMC with NUTS sampling (4 chains x 2,000 draws, R-hat = 1.000 everywhere, min ESS = 1,396, zero divergences). The likelihood is Student-t rather than Normal. QQ plots showed heavy tails across all six categories, and the posterior for the degrees-of-freedom parameter sits tightly at ν ≈ 1.15, well below the threshold of 30 where Student-t approximates Normal.
 
-**XGBoost classifier (predictive signal):** Binary classifier (beat / miss) from 7 pre-announcement revision path features plus category and macro context. Strictly temporal train/test split (2017–2022 train, 2023–2025 test) — no random split to avoid look-ahead leakage. Class imbalance (82% beat rate) handled with `scale_pos_weight`. Evaluated on AUC-ROC and PR-AUC rather than accuracy.
+**XGBoost classifier (predictive signal):** Binary classifier (beat/miss) from 7 pre-announcement revision path features plus category and macro context. The train/test split is strictly temporal: 2017-2022 for training, 2023-2025 for testing. No random split was used because it would let future quarters leak into training. The 82% beat rate is handled with `scale_pos_weight`. Evaluation uses AUC-ROC and PR-AUC, not accuracy.
 
-*Full methodology, model specification, convergence diagnostics, and limitations in the [6-page PDF report](reports/analyst_forecast_bias_report.pdf).*
+*Full methodology, convergence diagnostics, and limitations are in the [6-page PDF report](reports/analyst_forecast_bias_report.pdf).*
 
 ---
 
@@ -150,7 +150,7 @@ graph LR
 
 | Source | What | How |
 |---|---|---|
-| [DoltHub — `dolthub/earnings`](https://www.dolthub.com/repositories/dolthub/earnings) | Quarterly EPS actuals + weekly consensus estimates for all US equities | `dolt table export` → filtered to 72 tickers by `ingest.py` |
+| [DoltHub - `dolthub/earnings`](https://www.dolthub.com/repositories/dolthub/earnings) | Quarterly EPS actuals + weekly consensus estimates for all US equities | `dolt table export`, then filtered to 72 tickers by `ingest.py` |
 | [yfinance](https://github.com/ranaroussi/yfinance) | S&P 500 monthly prices (for HMM) and quarterly returns + VIX | Downloaded at runtime by `macro.py` and `regime.py` |
 | [FRED API](https://fred.stlouisfed.org/) | USREC recession indicator (fallback if HMM diverges) | Via `fredapi` in `regime.py` if needed |
 
@@ -184,11 +184,11 @@ python src/clean.py       # clean, compute forecast_error, winsorize
 python src/macro.py       # download VIX + S&P 500, z-score, merge
 python src/regime.py      # fit 3-state HMM, label market regimes
 python src/features.py    # engineer 7 revision path features
-python src/models.py      # hierarchical Bayesian model — NUTS ~20 min on 4 cores
+python src/models.py      # hierarchical Bayesian model - NUTS, ~20 min on 4 cores
 python src/signals.py     # XGBoost classifier + evaluation
 ```
 
-**Runtime:** `models.py` takes ~20 minutes with 4 chains × 2,000 draws. All other steps run in under 2 minutes. Logs for each step written to `logs/`.
+**Runtime:** `models.py` takes around 20 minutes with 4 chains x 2,000 draws. Everything else runs in under 2 minutes. Logs for each step are written to `logs/`.
 
 ---
 
