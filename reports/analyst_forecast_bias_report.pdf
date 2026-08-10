@@ -57,7 +57,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
 endobj
 9 0 obj
-<< /Length 2673 >>
+<< /Length 2663 >>
 stream
 0.467 0.467 0.467 rg
 BT /F3 8 Tf 410 750 Td (Analyst Forecast Bias  |  Souradeep Roy) Tj ET
@@ -71,12 +71,12 @@ BT /F2 11 Tf 54 726.0 Td (Category Definitions) Tj ET
 BT /F1 9.5 Tf 54 710.0 Td (Companies are grouped into six earnings-driver categories. Defensive baseline \(12 tickers: JNJ,) Tj ET
 BT /F1 9.5 Tf 54 696.5 Td (PG, KO and similar\) serves as the control group - stable, predictable earnings, deep analyst) Tj ET
 BT /F1 9.5 Tf 54 683.0 Td (coverage. The five other categories are:) Tj ET
-BT /F2 9.5 Tf 68 664.5 Td (• ) Tj /F1 9.5 Tf (Commodity driven \(XOM, CVX, FCX and similar\) - earnings tied to commodity prices) Tj ET
-BT /F2 9.5 Tf 68 649.0 Td (• ) Tj /F1 9.5 Tf (Macro rate sensitive \(JPM, GS, BAC and similar\) - driven by interest rate spreads and credit) Tj ET
+BT /F2 9.5 Tf 68 664.5 Td (- ) Tj /F1 9.5 Tf (Commodity driven \(XOM, CVX, FCX and similar\) - earnings tied to commodity prices) Tj ET
+BT /F2 9.5 Tf 68 649.0 Td (- ) Tj /F1 9.5 Tf (Macro rate sensitive \(JPM, GS, BAC and similar\) - driven by interest rate spreads and credit) Tj ET
 BT /F1 9.5 Tf 78 635.5 Td (conditions) Tj ET
-BT /F2 9.5 Tf 68 620.0 Td (• ) Tj /F1 9.5 Tf (Tech cycle \(NVDA, AAPL, ASML and similar\) - driven by semiconductor and product cycles) Tj ET
-BT /F2 9.5 Tf 68 604.5 Td (• ) Tj /F1 9.5 Tf (Economically cyclical \(CAT, F, AMZN and similar\) - tracks the broader economic cycle) Tj ET
-BT /F2 9.5 Tf 68 589.0 Td (• ) Tj /F1 9.5 Tf (Regulatory idiosyncratic \(LLY, PFE, NEE and similar\) - earnings shaped by regulatory events) Tj ET
+BT /F2 9.5 Tf 68 620.0 Td (- ) Tj /F1 9.5 Tf (Tech cycle \(NVDA, AAPL, ASML and similar\) - driven by semiconductor and product cycles) Tj ET
+BT /F2 9.5 Tf 68 604.5 Td (- ) Tj /F1 9.5 Tf (Economically cyclical \(CAT, F, AMZN and similar\) - tracks the broader economic cycle) Tj ET
+BT /F2 9.5 Tf 68 589.0 Td (- ) Tj /F1 9.5 Tf (Regulatory idiosyncratic \(LLY, PFE, NEE and similar\) - earnings shaped by regulatory events) Tj ET
 BT /F1 9.5 Tf 78 575.5 Td (and approvals) Tj ET
 BT /F1 9.5 Tf 54 557.0 Td (If the bias patterns found in the other five categories are real and not artifacts of the data or) Tj ET
 BT /F1 9.5 Tf 54 543.5 Td (methodology, they should not appear in defensive baseline. This is the falsifiability check built into) Tj ET
@@ -101,7 +101,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 11 0 R >>
 endobj
 11 0 obj
-<< /Length 3045 >>
+<< /Length 3031 >>
 stream
 0.467 0.467 0.467 rg
 BT /F3 8 Tf 410 750 Td (Analyst Forecast Bias  |  Souradeep Roy) Tj ET
@@ -136,13 +136,13 @@ BT /F2 11 Tf 54 448.0 Td (Revision Path Features) Tj ET
 0.067 0.067 0.067 rg
 BT /F1 9.5 Tf 54 432.0 Td (Seven features are constructed from the weekly consensus snapshots for each company-quarter. All) Tj ET
 BT /F1 9.5 Tf 54 418.5 Td (are observable before the earnings announcement and contain no forward-looking information:) Tj ET
-BT /F2 9.5 Tf 68 400.0 Td (• ) Tj /F1 9.5 Tf (Revision slope - linear trend of consensus estimates over the 16-week window) Tj ET
-BT /F2 9.5 Tf 68 384.5 Td (• ) Tj /F1 9.5 Tf (Revision acceleration - whether the revision trend is gaining or losing momentum) Tj ET
-BT /F2 9.5 Tf 68 369.0 Td (• ) Tj /F1 9.5 Tf (Direction changes - how many times consensus reversed direction) Tj ET
-BT /F2 9.5 Tf 68 353.5 Td (• ) Tj /F1 9.5 Tf (Final vs initial - net change in consensus from eight weeks before announcement to the day before) Tj ET
-BT /F2 9.5 Tf 68 338.0 Td (• ) Tj /F1 9.5 Tf (Spread trend - whether analyst disagreement \(high minus low estimate\) is growing or shrinking) Tj ET
-BT /F2 9.5 Tf 68 322.5 Td (• ) Tj /F1 9.5 Tf (Analyst count trend - whether coverage is growing or shrinking into the quarter) Tj ET
-BT /F2 9.5 Tf 68 307.0 Td (• ) Tj /F1 9.5 Tf (Weeks of data - number of weekly snapshots available) Tj ET
+BT /F2 9.5 Tf 68 400.0 Td (- ) Tj /F1 9.5 Tf (Revision slope - linear trend of consensus estimates over the 16-week window) Tj ET
+BT /F2 9.5 Tf 68 384.5 Td (- ) Tj /F1 9.5 Tf (Revision acceleration - whether the revision trend is gaining or losing momentum) Tj ET
+BT /F2 9.5 Tf 68 369.0 Td (- ) Tj /F1 9.5 Tf (Direction changes - how many times consensus reversed direction) Tj ET
+BT /F2 9.5 Tf 68 353.5 Td (- ) Tj /F1 9.5 Tf (Final vs initial - net change in consensus from eight weeks before announcement to the day before) Tj ET
+BT /F2 9.5 Tf 68 338.0 Td (- ) Tj /F1 9.5 Tf (Spread trend - whether analyst disagreement \(high minus low estimate\) is growing or shrinking) Tj ET
+BT /F2 9.5 Tf 68 322.5 Td (- ) Tj /F1 9.5 Tf (Analyst count trend - whether coverage is growing or shrinking into the quarter) Tj ET
+BT /F2 9.5 Tf 68 307.0 Td (- ) Tj /F1 9.5 Tf (Weeks of data - number of weekly snapshots available) Tj ET
 endstream
 endobj
 12 0 obj
@@ -201,7 +201,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 15 0 R >>
 endobj
 15 0 obj
-<< /Length 3409 >>
+<< /Length 3403 >>
 stream
 0.467 0.467 0.467 rg
 BT /F3 8 Tf 410 750 Td (Analyst Forecast Bias  |  Souradeep Roy) Tj ET
@@ -218,11 +218,11 @@ BT /F1 9.5 Tf 54 683.0 Td (consistent across all probability thresholds, and the
 BT /F1 9.5 Tf 54 669.5 Td (a reliable ordinal ranking - higher predicted beat probability corresponds monotonically to higher) Tj ET
 BT /F1 9.5 Tf 54 656.0 Td (actual beat rate across all bins.) Tj ET
 BT /F1 9.5 Tf 54 637.5 Td (The per-category AUC breakdown is the most practically useful result:) Tj ET
-BT /F2 9.5 Tf 68 619.0 Td (• ) Tj /F1 9.5 Tf (Tech cycle: 0.673 - revision path is genuinely predictive. Analysts revise upward before tech) Tj ET
+BT /F2 9.5 Tf 68 619.0 Td (- ) Tj /F1 9.5 Tf (Tech cycle: 0.673 - revision path is genuinely predictive. Analysts revise upward before tech) Tj ET
 BT /F1 9.5 Tf 78 605.5 Td (announcements but systematically undershoot, and this pattern is learnable) Tj ET
-BT /F2 9.5 Tf 68 590.0 Td (• ) Tj /F1 9.5 Tf (Defensive baseline: 0.567  |  Economically cyclical: 0.551  |  Macro rate sensitive: 0.537 - all above) Tj ET
+BT /F2 9.5 Tf 68 590.0 Td (- ) Tj /F1 9.5 Tf (Defensive baseline: 0.567  |  Economically cyclical: 0.551  |  Macro rate sensitive: 0.537 - all above) Tj ET
 BT /F1 9.5 Tf 78 576.5 Td (random) Tj ET
-BT /F2 9.5 Tf 68 561.0 Td (• ) Tj /F1 9.5 Tf (Commodity driven: 0.440  |  Regulatory idiosyncratic: 0.453 - both below random) Tj ET
+BT /F2 9.5 Tf 68 561.0 Td (- ) Tj /F1 9.5 Tf (Commodity driven: 0.440  |  Regulatory idiosyncratic: 0.453 - both below random) Tj ET
 BT /F1 9.5 Tf 54 542.5 Td (For commodity and regulatory companies the revision path actively misleads. Commodity earnings) Tj ET
 BT /F1 9.5 Tf 54 529.0 Td (are driven by oil and metals prices that move after analysts have submitted their estimates.) Tj ET
 BT /F1 9.5 Tf 54 515.5 Td (Regulatory earnings turn on binary FDA approval decisions. No amount of watching consensus revisions) Tj ET
@@ -260,16 +260,16 @@ xref
 0000000346 00000 n 
 0000000450 00000 n 
 0000000615 00000 n 
-0000002781 00000 n 
-0000002946 00000 n 
-0000005690 00000 n 
-0000005856 00000 n 
-0000008972 00000 n 
-0000009138 00000 n 
-0000012382 00000 n 
-0000012548 00000 n 
+000002781 00000 n 
+000002946 00000 n 
+000005680 00000 n 
+000005846 00000 n 
+000008948 00000 n 
+000009114 00000 n 
+000012358 00000 n 
+000012524 00000 n 
 trailer
 << /Size 16 /Root 1 0 R >>
 startxref
-16028
+15998
 %%EOF
